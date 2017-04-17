@@ -1,7 +1,6 @@
 #include "mcmf.h"
 
 void MCMF_YCW::allocate_arrays() {
-        // (1) allocate memory for 'nodes', 'arcs' and internal arrays;
 
         nodesArrayYCWVar = (NODE*) calloc ( nodeNumYCWVar+2,   sizeof(NODE) );
         arcsArrayYCWVar = (ARC*)  calloc ( 2*arcNumYCWVar+1, sizeof(ARC) );
@@ -9,19 +8,14 @@ void MCMF_YCW::allocate_arrays() {
 
         arcTailYCWVar = (long*) calloc ( 2*arcNumYCWVar,   sizeof(long) );
         arcFirstYCWVar = (long*) calloc ( nodeNumYCWVar+2,   sizeof(long) );
-        // arc_first [ 0 .. n+1 ] = 0 - initialized by calloc;
 
         for ( NODE *in = nodesArrayYCWVar; in <= nodesArrayYCWVar + nodeNumYCWVar; in ++ ) {
                 in->set_excess( 0);
         }
-        if ( nodesArrayYCWVar == NULL || arcsArrayYCWVar == NULL || arcFirstYCWVar == NULL || arcTailYCWVar == NULL) {
-                printf("Error:  Memory allocation problem inside CS2\n");
-                exit( 1);
-        }
 
         // (2) resets;
         posCurrent = 0;
-        arcCurrent = arcsArrayYCWVar; // set "current" pointer to the first arc
+        arcCurrent = arcsArrayYCWVar; 
         nodeMaxYCWVar = 0;
         nodeMinYCWVar = nodeNumYCWVar;
         maxCost = 0;
@@ -44,7 +38,7 @@ void MCMF_YCW::set_arc( long tail_node_id, long head_node_id,
                         long low_bound, long up_bound, // up_bound is basically capacity;
                         priceType cost) {
         if ( up_bound < 0 ) {
-                up_bound = MAX_32;
+                up_bound = 0x7fffffff;
         }
 
         // no of arcs incident to node i is placed in _arc_first[i+1]
@@ -108,10 +102,6 @@ void MCMF_YCW::pre_processing() {
         // first arc from the first node
         ( nodesArrayYCWVar + nodeMinYCWVar )->set_first( arcsArrayYCWVar );
 
-        // before below loop arc_first[i+1] is the number of arcs outgoing from i;
-        // after this loop arc_first[i] is the position of the first
-        // outgoing from node i arcs after they would be ordered;
-        // this value is transformed to pointer and written to node.first[i]
         for ( i = nodeMinYCWVar + 1; i <= nodeMaxYCWVar + 1; i ++ ) {
                 arcFirstYCWVar[i] += arcFirstYCWVar[i-1];
                 ( nodesArrayYCWVar + i )->set_first( arcsArrayYCWVar + arcFirstYCWVar[i] );
@@ -121,25 +111,15 @@ void MCMF_YCW::pre_processing() {
         for ( i = nodeMinYCWVar; i < nodeMaxYCWVar; i ++ ) {
 
                 last = ( ( nodesArrayYCWVar + i + 1 )->first() ) - arcsArrayYCWVar;
-                // arcs outgoing from i must be cited
-                // from position arc_first[i] to the position
-                // equal to initial value of arc_first[i+1]-1
 
                 for ( arc_num = arcFirstYCWVar[i]; arc_num < last; arc_num ++ ) {
                         tail_node_id = arcTailYCWVar[arc_num];
 
                         while ( tail_node_id != i ) {
-                                // the arc no  arc_num  is not in place because arc cited here
-                                // must go out from i;
-                                // we'll put it to its place and continue this process
-                                // until an arc in this position would go out from i
 
                                 arc_new_num = arcFirstYCWVar[tail_node_id];
                                 arcCurrent = arcsArrayYCWVar + arc_num;
                                 arc_new = arcsArrayYCWVar + arc_new_num;
-
-                                // arc_current must be cited in the position arc_new
-                                // swapping these arcs:
 
                                 head_p = arc_new->head();
                                 arc_new->set_head( arcCurrent->head() );
@@ -177,10 +157,7 @@ void MCMF_YCW::pre_processing() {
                 }
                 // all arcs outgoing from  i  are in place
         }
-        // arcs are ordered by now!
 
-
-        // testing network for possible excess overflow
         for ( NODE *ndp = nodesArrayYCWVar + nodeMinYCWVar; ndp <= nodesArrayYCWVar + nodeMaxYCWVar; ndp ++ ) {
                 cap_in  =   ( ndp->excess() );
                 cap_out = - ( ndp->excess() );
@@ -203,16 +180,13 @@ void MCMF_YCW::pre_processing() {
 }
 
 void MCMF_YCW::cs2_initialize() {
-        // initialization;
-        // called after allocate_arrays() and all nodes and arcs have been inputed;
-
         NODE *i; // current node
         ARC *a; // current arc
         ARC *a_stop;
         BUCKET *b; // current bucket
         long df;
 
-        fScaleYCWVar = (long) SCALE_DEFAULT;
+        fScaleYCWVar = (long) 12.0;
         sentinelNode = nodesArrayYCWVar + nodeNumYCWVar;
         sentinelArc  = arcsArrayYCWVar + arcNumYCWVar;
 
@@ -227,7 +201,6 @@ void MCMF_YCW::cs2_initialize() {
         sentinelNode->set_suspended( sentinelArc);
 
 
-        // saturate negative arcs, e.g. in the circulation problem case
         for ( i = nodesArrayYCWVar; i != sentinelNode; i ++ ) {
                 for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++ ) {
                         if ( a->cost() < 0) {
@@ -275,11 +248,11 @@ void MCMF_YCW::cs2_initialize() {
                 epsilonYCWVar = 1;
         }
 
-        priceMinYCWVar = -PRICE_MAX;
+        priceMinYCWVar = -(0x7fffffffffffffffLL);
 
-        cutOffFactor = CUT_OFF_COEF * pow( (double)nodeNumYCWVar, CUT_OFF_POWER);
+        cutOffFactor = 1.5 * pow( (double)nodeNumYCWVar, 0.44);
 
-        cutOffFactor = cutOffFactor > CUT_OFF_MIN  ?  cutOffFactor : CUT_OFF_MIN;
+        cutOffFactor = cutOffFactor > 12  ?  cutOffFactor : 12;
 
         nRefYCWVar = 0;
 
@@ -289,7 +262,6 @@ void MCMF_YCW::cs2_initialize() {
 
         excqFirst = NULL;
 
-        //print_graph(); // debug;
 }
 
 void MCMF_YCW::up_node_scan( NODE *i) {
@@ -356,9 +328,8 @@ void MCMF_YCW::up_node_scan( NODE *i) {
 void MCMF_YCW::price_update() {
         register NODE *i;
         excessType remain;
-        // total excess of unscanned nodes with positive excess;
-        BUCKET *b; // current bucket;
-        priceType dp; // amount to be subtracted from prices;
+        BUCKET *b; 
+        priceType dp; 
 
         nUpdateYCWVar ++;
 
@@ -374,12 +345,9 @@ void MCMF_YCW::price_update() {
         remain = totalExcess;
         if ( remain < 0.5 ) return;
 
-        // scanning buckets, main loop;
         for ( b = bucketsArrayYCWVar; b != lBucket; b ++ ) {
 
                 while ( nonempty_bucket( b) ) {
-
-                        // GET_FROM_BUCKET( i, b );
                         i=(b -> p_first() );
                         b ->set_p_first( i -> b_next() );
                         up_node_scan( i );
@@ -394,15 +362,12 @@ void MCMF_YCW::price_update() {
 
         if ( remain > 0.5 ) flagUpdt = 1;
 
-        // finishup
-        // changing prices for nodes which were not scanned during main loop;
         dp = ( b - bucketsArrayYCWVar ) * epsilonYCWVar;
 
         for ( i = nodesArrayYCWVar; i != sentinelNode; i ++ ) {
 
                 if ( i->rank() >= 0 ) {
                         if ( i->rank() < _linf ) {
-                                // REMOVE_FROM_BUCKET( i, ( _buckets + i->rank()) );
                                 if ( i == ( ( bucketsArrayYCWVar + i->rank()) -> p_first() ) )
                                         ( bucketsArrayYCWVar + i->rank()) ->set_p_first( i -> b_next() );
                                 else
@@ -419,19 +384,18 @@ void MCMF_YCW::price_update() {
 }
 
 int MCMF_YCW::relabel( NODE *i) {
-        register ARC *a; // current arc from i
-        register ARC *a_stop; // first arc from the next node
-        register ARC *a_max; // arc which provides maximum price
-        register priceType p_max; // current maximal price
-        register priceType i_price; // price of node  i
-        register priceType dp; // current arc partial residual cost
+        register ARC *a; 
+        register ARC *a_stop; 
+        register ARC *a_max; 
+        register priceType p_max; 
+        register priceType i_price; 
+        register priceType dp; 
 
         p_max = priceMinYCWVar;
         i_price = i->price();
 
         a_max = NULL;
 
-        // 1/2 arcs are scanned;
         for ( a = i->current() + 1, a_stop = (i + 1)->suspended(); a != a_stop; a ++ ) {
 
                 if ( (a->rez_capacity() > 0) && ( (dp = (a->head()->price() - a->cost())) > p_max ) ) {
@@ -444,7 +408,6 @@ int MCMF_YCW::relabel( NODE *i) {
                 }
         }
 
-        // 2/2 arcs are scanned;
         for ( a = i->first(), a_stop = i->current() + 1; a != a_stop; a ++ ) {
                 if ( (a->rez_capacity() > 0) && ( (dp = (a->head()->price() - a->cost())) > p_max ) ) {
                         if ( i_price < dp ) {
@@ -456,11 +419,10 @@ int MCMF_YCW::relabel( NODE *i) {
                 }
         }
 
-        // finishup
         if ( p_max != priceMinYCWVar ) {
                 i->set_price( p_max - epsilonYCWVar);
                 i->set_current( a_max);
-        } else { // node can't be relabelled;
+        } else { 
                 if ( i->suspended() == i->first() ) {
                         if ( i->excess() == 0 ) {
                                 i->set_price( priceMinYCWVar);
@@ -471,7 +433,7 @@ int MCMF_YCW::relabel( NODE *i) {
                                         return -1;
                                 }
                         }
-                } else { // node can't be relabelled because of suspended arcs;
+                } else { 
                         flagPrice = 1;
                 }
         }
@@ -669,7 +631,7 @@ int MCMF_YCW::refine() {
         while ( 1 ) {
 
                 if ( empty_excess_q() ) {
-                        if ( nRefYCWVar > PRICE_OUT_START ) {
+                        if ( nRefYCWVar > 1 ) {
                                 pr_in_int = 0;
                                 price_in();
                         }
@@ -677,12 +639,10 @@ int MCMF_YCW::refine() {
                         if ( empty_excess_q() ) break;
                 }
 
-                // STACKQ_POP( i );
                 i = excqFirst;
                 excqFirst = i -> q_next();
                 i ->set_q_next( sentinelNode );
 
-                // push all excess out of i
                 if ( i->excess() > 0 ) {
                         discharge( i );
 
@@ -691,7 +651,7 @@ int MCMF_YCW::refine() {
                                         insert_to_excess_q( i );
                                 }
 
-                                if ( flagPrice && ( nRefYCWVar > PRICE_OUT_START ) ) {
+                                if ( flagPrice && ( nRefYCWVar > 1 ) ) {
                                         pr_in_int = 0;
                                         price_in();
                                         flagPrice = 0;
@@ -713,7 +673,7 @@ int MCMF_YCW::refine() {
                                 }
                                 nRelYCWVar = 0;
 
-                                if ( nRefYCWVar > PRICE_OUT_START && (pr_in_int ++ > timeForPriceIn) ) {
+                                if ( nRefYCWVar > 1 && (pr_in_int ++ > timeForPriceIn) ) {
                                         pr_in_int = 0;
                                         price_in();
                                 }
@@ -1168,7 +1128,7 @@ int MCMF_YCW::update_epsilon() {
 
         epsilonYCWVar = (priceType) (ceil ( (double) epsilonYCWVar / fScaleYCWVar ));
         cutOff = cutOffFactor * epsilonYCWVar;
-        cutOn = cutOff * CUT_OFF_GAP;
+        cutOn = cutOff * 0.8;
 
         return ( 0 );
 }
@@ -1252,9 +1212,9 @@ void MCMF_YCW::cs_cost_reinit() {
 
         epsilonYCWVar = ceil(sum / _dn);
 
-        cutOffFactor = CUT_OFF_COEF * pow((double)nodeNumYCWVar, CUT_OFF_POWER);
+        cutOffFactor = 1.5 * pow((double)nodeNumYCWVar, 0.44);
 
-        cutOffFactor =  cutOffFactor > CUT_OFF_MIN ? cutOffFactor:CUT_OFF_MIN;
+        cutOffFactor =  cutOffFactor > 12 ? cutOffFactor:12;
 
         nRefYCWVar = 0;
 
@@ -1284,7 +1244,7 @@ void MCMF_YCW::cs2_cost_restart( double *objective_cost) {
                                 if ( ! price_refine() )
                                         break;
 
-                                if ( nRefYCWVar >= PRICE_OUT_START ) {
+                                if ( nRefYCWVar >= 1 ) {
                                         if ( price_in() )
                                                 break;
                                 }
@@ -1293,7 +1253,7 @@ void MCMF_YCW::cs2_cost_restart( double *objective_cost) {
                         }
                         if (cc) break;
                         refine();
-                        if ( nRefYCWVar >= PRICE_OUT_START ) {
+                        if ( nRefYCWVar >= 1 ) {
                                 price_out();
                         }
                         if ( update_epsilon() )
@@ -1355,7 +1315,7 @@ void MCMF_YCW::cs2( double *objective_cost) {
 
         // (2) scaling loop;
         do {
-//		refine();
+//              refine();
 
                 int ref = refine();
                 if(ref==-1) {
@@ -1363,7 +1323,7 @@ void MCMF_YCW::cs2( double *objective_cost) {
                         return ;
                 }
 
-                if ( nRefYCWVar >= PRICE_OUT_START )
+                if ( nRefYCWVar >= 1 )
                         price_out();
 
                 if ( update_epsilon() )
@@ -1373,7 +1333,7 @@ void MCMF_YCW::cs2( double *objective_cost) {
                         if ( ! price_refine() )
                                 break;
 
-                        if ( nRefYCWVar >= PRICE_OUT_START ) {
+                        if ( nRefYCWVar >= 1 ) {
                                 if ( price_in() ) break;
                                 if ( (cc = update_epsilon()) ) break;
                         }
