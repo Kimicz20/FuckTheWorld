@@ -30,39 +30,6 @@
 
 using namespace std;
 
-// 常量定义
-#define MAX_64 (0x7fffffffffffffffLL)
-#define MAX_32 (0x7fffffff)
-#define PRICE_MAX MAX_64
-
-#define MAXLINE       20000 // max line length in the input file
-#define ARC_FIELDS      5 // no of fields in arc line
-#define NODE_FIELDS     2 // no of fields in node line
-#define P_FIELDS        3 // no of fields in problem line
-#define PROBLEM_TYPE "min" //  name of problem type
-
-#define UNFEASIBLE          2
-#define ALLOCATION_FAULT    5
-#define PRICE_OFL           6
-
-// parameters
-#define UPDT_FREQ      0.4
-#define UPDT_FREQ_S    30
-#define SCALE_DEFAULT  12.0
-// PRICE_OUT_START may not be less than 1
-#define PRICE_OUT_START  1
-#define CUT_OFF_POWER    0.44
-#define CUT_OFF_COEF     1.5
-#define CUT_OFF_POWER2   0.75
-#define CUT_OFF_COEF2    1
-#define CUT_OFF_GAP      0.8
-#define CUT_OFF_MIN      12
-#define CUT_OFF_INCREASE 4
-
-#define TIME_FOR_PRICE_IN1    2
-#define TIME_FOR_PRICE_IN2    4
-#define TIME_FOR_PRICE_IN3    6
-
 typedef long long int excessType,priceType;
 
 class MCMF_YCW
@@ -111,9 +78,9 @@ class MCMF_YCW
                 class ARC {
                         public:
                                 long rezCapacityARCVar; // 剩余容量
-                                priceType costARCVar; 		// 费用
+                                priceType costARCVar;       // 费用
                                 NODE *headARCVar;
-                                ARC *sisterARCVar; 		// 相对弧
+                                ARC *sisterARCVar;      // 相对弧
                         public:
                                 void set_rez_capacity( long rez_capacity) { rezCapacityARCVar = rez_capacity; }
                                 void dec_rez_capacity( long delta) { rezCapacityARCVar -= delta; }
@@ -241,7 +208,7 @@ class MCMF_YCW
                         a->sister()->inc_rez_capacity( df);
                 }
                 bool time_for_update() {
-                        return ( nRelYCWVar > nodeNumYCWVar * UPDT_FREQ + nSrcYCWVar * UPDT_FREQ_S);
+                        return ( nRelYCWVar > nodeNumYCWVar * 0.4 + nSrcYCWVar * 30);
                 }
                 void reset_excess_q() {
                         for ( ; excqFirst != NULL; excqFirst = excqLast ) {
@@ -304,14 +271,14 @@ class MCMF_YCW
                 }
                 void update_cut_off() {
                         if ( nBadPricein + nBadRelabelYCWVar == 0) {
-                                cutOffFactor = CUT_OFF_COEF2 * pow( (double)nodeNumYCWVar, CUT_OFF_POWER2 );
-                                cutOffFactor = cutOffFactor > CUT_OFF_MIN ? cutOffFactor:CUT_OFF_MIN;
+                                cutOffFactor = pow( (double)nodeNumYCWVar, 0.75 );
+                                cutOffFactor = cutOffFactor > 12 ? cutOffFactor:12;
                                 cutOff = cutOffFactor * epsilonYCWVar;
-                                cutOn = cutOff * CUT_OFF_GAP;
+                                cutOn = cutOff * 0.8;
                         } else {
-                                cutOffFactor *= CUT_OFF_INCREASE;
+                                cutOffFactor *= 4;
                                 cutOff = cutOffFactor * epsilonYCWVar;
-                                cutOn = cutOff * CUT_OFF_GAP;
+                                cutOn = cutOff * 0.8;
                         }
                 }
                 void exchange( ARC *a, ARC *b) {
