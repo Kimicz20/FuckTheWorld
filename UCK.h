@@ -142,128 +142,51 @@ class MCMF_YCW
                 };
 
                 //计算总费用需要的属性
-                int netStates;
-                int consumeStates;
-                int totalNeed;
+                int netStates,consumeStates,totalNeed;
                 map<int,pair<int,int> > serverLevel;//保存服务器档次信息
                 map<int, int> serverAllPrice;
                 map<int, int> getServerAllPrice();
                 vector<int> netStateDeployPrice;//网络节点部署成本
                 bool isOutputResult = false;
 
-                long _n; // number of nodes
-                long _m; // number of arcs
-                long *_cap; // array containig capacities
-                NODE *_nodes; // array of nodes
-                NODE *_sentinel_node; // next after last
-                NODE *_excq_first; // first node in push-queue
-                NODE *_excq_last; // last node in push-queue
-                ARC *_arcs; // array of arcs
-                ARC *_sentinel_arc; // next after last
+                long nodeNumYCWVar,arcNumYCWVar,*capArrayYCWVar;   // 容量数组
+                NODE *nodesArrayYCWVar,*sentinelNode,*excqFirst,*excqLast;
+                ARC *arcsArrayYCWVar,*sentinelArc;
 
-                BUCKET *_buckets; // array of buckets
-                BUCKET *_l_bucket; // last bucket
-                long _linf; // number of l_bucket + 1
-                int _time_for_price_in;
+                BUCKET *bucketsArrayYCWVar,*lBucket;
+                long _linf;
+                int timeForPriceIn;
 
-                priceType _epsilon; // quality measure
-                priceType _dn; // cost multiplier = number of nodes + 1
-                priceType _price_min; // lowest bound for prices
-                priceType _mmc; // multiplied maximal cost
-                double _f_scale; // scale factor
-                double _cut_off_factor; // multiplier to produce cut_on and cut_off from n and epsilon
-                double _cut_on; // the bound for returning suspended arcs
-                double _cut_off; // the bound for suspending arcs
-                excessType _total_excess; // total excess
+                priceType epsilonYCWVar,_dn,priceMinYCWVar,_mmc;
+                double fScaleYCWVar,cutOffFactor,cutOn,cutOff;
+                excessType totalExcess;
 
-                // if = 1 - signal to start price-in ASAP -
-                // maybe there is infeasibility because of susoended arcs
-                int _flag_price;
-                // if = 1 - update failed some sources are unreachable: either the
-                // problem is unfeasible or you have to return suspended arcs
-                int _flag_updt;
-                // maximal number of cycles cancelled during price refine
-                int _snc_max;
+                int flagPrice,flagUpdt,sncMaxYCWVar;
 
-                // dummy variables;
-                ARC _d_arc; // dummy arc - for technical reasons
-                NODE _d_node; // dummy node - for technical reasons
-                NODE *_dummy_node; // the address of d_node
-                NODE *_dnode;
+                ARC dArcYCWVar;
+                NODE dOneNode,*_dummy_node,*dTwoNode;
 
-                long _n_rel; // number of relabels from last price update
-                long _n_ref; // current number of refines
-                long _n_src; // current number of nodes with excess
-                long _n_push;
-                long _n_relabel;
-                long _n_discharge;
-                long _n_refine;
-                long _n_update;
-                long _n_scan;
-                long _n_prscan;
-                long _n_prscan1;
-                long _n_prscan2;
-                long _n_bad_pricein;
-                long _n_bad_relabel;
-                long _n_prefine;
+                long nRelYCWVar,nRefYCWVar,nSrcYCWVar,nPushYCWVar,nRelabelYCWVar,nDischargeYCWVar,nRefineYCWVar,nUpdateYCWVar,nScanYCWVar,nPrscanYCWVar,nPrscanOneYCWVar;
+                long nPrscanTwoYCWVar,nBadPricein,nBadRelabelYCWVar,nPrefineYCWVar;
 
-                bool _no_zero_cycles; // finds an optimal flow with no zero-cost cycles
-                bool _check_solution; // check feasibility/optimality. HIGH OVERHEAD!
-                bool _comp_duals; // compute prices?
-                bool _cost_restart; // to be able to restart after a cost function change
-                bool _print_ans;
-                long long int *_node_balance;
+                bool noZeroCycles,checkSolution,compDualsYCWVar,costRestartYCWVar,printAnsYCWVar;
+                long long int *nodeBalanceYCWVar;
 
-                // sketch variables used during reading in arcs;
-                long _node_min; // minimal no of nodes
-                long _node_max; // maximal no of nodes
-                long *_arc_first; // internal array for holding
-                                  // - node degree
-                                  // - position of the first outgoing arc
-                long *_arc_tail; // internal array: tails of the arcs
-                long _pos_current;
-                ARC *_arc_current;
-                ARC *_arc_new;
-                ARC *_arc_tmp;
-                priceType _max_cost; // maximum cost
-                excessType _total_p; // total supply
-                excessType _total_n; // total demand
-                // pointers to the node structure
-                NODE *_i_node;
-                NODE *_j_node;
+                long nodeMinYCWVar,nodeMaxYCWVar,*arcFirstYCWVar,*arcTailYCWVar,posCurrent;
+                ARC *arcCurrent,*arcNew,*arcTmp;
+                priceType maxCost;
+                excessType totalPYCWVar,totalNYCWVar;
 
-                MCMF_YCW( long num_nodes, long num_arcs) {
-                        _n = num_nodes;
-                        _m = num_arcs;
+                NODE *iNode,*jNode;
 
-                        _flag_price = 0;
-                        _flag_updt = 0;
-                        _n_push = 0;
-                        _n_relabel = 0;
-                        _n_discharge = 0;
-                        _n_refine = 0;
-                        _n_update = 0;
-                        _n_scan = 0;
-                        _n_prscan = 0;
-                        _n_prscan1 = 0;
-                        _n_prscan2 = 0;
-                        _n_bad_pricein = 0;
-                        _n_bad_relabel = 0;
-                        _n_prefine = 0;
-                        _no_zero_cycles = false;
-                        _check_solution = false;
-                        _comp_duals = false;
-                        _cost_restart = false;
-                        _print_ans = true;
-                        // allocate arrays and prepare for "receiving" arcs;
-                        // will also reset _pos_current, etc.;
-                        allocate_arrays();
-                }
                 //需要计算总费用的构造函数
-                MCMF_YCW( long num_nodes, long num_arcs,int netStates,int consumeStates,int totalNeed,map<int,pair<int,int> > serverLevel,vector<int> netStateDeployPrice) {
+                MCMF_YCW( long num_nodes, long num_arcs,int netStates,int consumeStates,int totalNeed,map<int,pair<int,int> > serverLevel,vector<int> netStateDeployPrice)
+                    :flagPrice(0),flagUpdt(0),nPushYCWVar(0),nRelabelYCWVar(0),nDischargeYCWVar(0),nRefineYCWVar(0),nUpdateYCWVar(0),nScanYCWVar(0),nPrscanYCWVar(0),
+                nPrscanOneYCWVar(0),nPrscanTwoYCWVar(0),nBadPricein(0),nBadRelabelYCWVar(0),nPrefineYCWVar(0),noZeroCycles(false),checkSolution(false),compDualsYCWVar(false),
+                costRestartYCWVar(false),printAnsYCWVar(true){
 
-                        _n = num_nodes;
-                        _m = num_arcs;
+                        this->nodeNumYCWVar = num_nodes;
+                        this->arcNumYCWVar = num_arcs;
 
                         this->netStates = netStates;
                         this->consumeStates = consumeStates;
@@ -273,29 +196,7 @@ class MCMF_YCW
                         this->serverLevel = serverLevel;
                         this->netStateDeployPrice = netStateDeployPrice;
 
-                        //printf("新的构造函数\n");
 
-                        _flag_price = 0;
-                        _flag_updt = 0;
-                        _n_push = 0;
-                        _n_relabel = 0;
-                        _n_discharge = 0;
-                        _n_refine = 0;
-                        _n_update = 0;
-                        _n_scan = 0;
-                        _n_prscan = 0;
-                        _n_prscan1 = 0;
-                        _n_prscan2 = 0;
-                        _n_bad_pricein = 0;
-                        _n_bad_relabel = 0;
-                        _n_prefine = 0;
-                        _no_zero_cycles = false;
-                        _check_solution = false;
-                        _comp_duals = false;
-                        _cost_restart = false;
-                        _print_ans = true;
-                        // allocate arrays and prepare for "receiving" arcs;
-                        // will also reset _pos_current, etc.;
                         allocate_arrays();
                 }
                 ~MCMF_YCW() {}
@@ -327,14 +228,12 @@ class MCMF_YCW
                 void print_graph();
                 void finishup( double *objective_cost);
                 void cs2( double *objective_cost);
-                int run_cs2();
                 int greenTea();
                 int addServerAndDeployPrice(double *cost);
                 pair<int,int> determineDC(int serverOutput);
                 //确定存储每个服务器的档次
                 void storeServerGrade();
 
-                // shared utils;
                 void increase_flow( NODE *i, NODE *j, ARC *a, long df) {
                         i->dec_excess( df);
                         j->inc_excess( df);
@@ -342,53 +241,50 @@ class MCMF_YCW
                         a->sister()->inc_rez_capacity( df);
                 }
                 bool time_for_update() {
-                        return ( _n_rel > _n * UPDT_FREQ + _n_src * UPDT_FREQ_S);
+                        return ( nRelYCWVar > nodeNumYCWVar * UPDT_FREQ + nSrcYCWVar * UPDT_FREQ_S);
                 }
-                // utils for excess queue;
                 void reset_excess_q() {
-                        for ( ; _excq_first != NULL; _excq_first = _excq_last ) {
-                                _excq_last = _excq_first->q_next();
-                                _excq_first->set_q_next( _sentinel_node);
+                        for ( ; excqFirst != NULL; excqFirst = excqLast ) {
+                                excqLast = excqFirst->q_next();
+                                excqFirst->set_q_next( sentinelNode);
                         }
                 }
-                bool out_of_excess_q( NODE *i) { return ( i->q_next() == _sentinel_node); }
-                bool empty_excess_q() { return ( _excq_first == NULL); }
-                bool nonempty_excess_q() { return ( _excq_first != NULL); }
+                bool out_of_excess_q( NODE *i) { return ( i->q_next() == sentinelNode); }
+                bool empty_excess_q() { return ( excqFirst == NULL); }
+                bool nonempty_excess_q() { return ( excqFirst != NULL); }
                 void insert_to_excess_q( NODE *i) {
                         if ( nonempty_excess_q() ) {
-                                _excq_last->set_q_next( i);
+                                excqLast->set_q_next( i);
                         } else {
-                                _excq_first = i;
+                                excqFirst = i;
                         }
                         i->set_q_next( NULL);
-                        _excq_last = i;
+                        excqLast = i;
                 }
                 void insert_to_front_excess_q( NODE *i) {
                         if ( empty_excess_q() ) {
-                                _excq_last = i;
+                                excqLast = i;
                         }
-                        i->set_q_next( _excq_first);
-                        _excq_first = i;
+                        i->set_q_next( excqFirst);
+                        excqFirst = i;
                 }
                 void remove_from_excess_q( NODE *i) {
-                        i = _excq_first;
-                        _excq_first = i->q_next();
-                        i->set_q_next( _sentinel_node);
+                        i = excqFirst;
+                        excqFirst = i->q_next();
+                        i->set_q_next( sentinelNode);
                 }
-                // utils for excess queue as a stack;
                 bool empty_stackq() { return empty_excess_q(); }
                 bool nonempty_stackq() { return nonempty_excess_q(); }
                 void reset_stackq() { reset_excess_q(); }
                 void stackq_push( NODE *i) {
-                        i->set_q_next( _excq_first);
-                        _excq_first = i;
+                        i->set_q_next( excqFirst);
+                        excqFirst = i;
                 }
                 void stackq_pop( NODE *i) {
                         remove_from_excess_q( i);
                 }
-                // utils for buckets;
-                void reset_bucket( BUCKET *b) { b->set_p_first( _dnode); }
-                bool nonempty_bucket( BUCKET *b) { return ( (b->p_first()) != _dnode); }
+                void reset_bucket( BUCKET *b) { b->set_p_first( dTwoNode); }
+                bool nonempty_bucket( BUCKET *b) { return ( (b->p_first()) != dTwoNode); }
                 void insert_to_bucket( NODE *i, BUCKET *b) {
                         i->set_b_next( b->p_first() );
                         b->p_first()->set_b_prev( i);
@@ -406,17 +302,16 @@ class MCMF_YCW
                                 i->b_next()->set_b_prev( i->b_prev());
                         }
                 }
-                // misc utils;
                 void update_cut_off() {
-                        if ( _n_bad_pricein + _n_bad_relabel == 0) {
-                                _cut_off_factor = CUT_OFF_COEF2 * pow( (double)_n, CUT_OFF_POWER2 );
-                                _cut_off_factor = _cut_off_factor > CUT_OFF_MIN ? _cut_off_factor:CUT_OFF_MIN;
-                                _cut_off = _cut_off_factor * _epsilon;
-                                _cut_on = _cut_off * CUT_OFF_GAP;
+                        if ( nBadPricein + nBadRelabelYCWVar == 0) {
+                                cutOffFactor = CUT_OFF_COEF2 * pow( (double)nodeNumYCWVar, CUT_OFF_POWER2 );
+                                cutOffFactor = cutOffFactor > CUT_OFF_MIN ? cutOffFactor:CUT_OFF_MIN;
+                                cutOff = cutOffFactor * epsilonYCWVar;
+                                cutOn = cutOff * CUT_OFF_GAP;
                         } else {
-                                _cut_off_factor *= CUT_OFF_INCREASE;
-                                _cut_off = _cut_off_factor * _epsilon;
-                                _cut_on = _cut_off * CUT_OFF_GAP;
+                                cutOffFactor *= CUT_OFF_INCREASE;
+                                cutOff = cutOffFactor * epsilonYCWVar;
+                                cutOn = cutOff * CUT_OFF_GAP;
                         }
                 }
                 void exchange( ARC *a, ARC *b) {
@@ -425,17 +320,17 @@ class MCMF_YCW
                                 ARC *sb = b->sister();
                                 long d_cap;
 
-                                _d_arc.set_rez_capacity( a->rez_capacity());
-                                _d_arc.set_cost( a->cost());
-                                _d_arc.set_head( a->head());
+                                dArcYCWVar.set_rez_capacity( a->rez_capacity());
+                                dArcYCWVar.set_cost( a->cost());
+                                dArcYCWVar.set_head( a->head());
 
                                 a->set_rez_capacity( b->rez_capacity());
                                 a->set_cost( b->cost());
                                 a->set_head( b->head());
 
-                                b->set_rez_capacity( _d_arc.rez_capacity());
-                                b->set_cost( _d_arc.cost());
-                                b->set_head( _d_arc.head());
+                                b->set_rez_capacity( dArcYCWVar.rez_capacity());
+                                b->set_cost( dArcYCWVar.cost());
+                                b->set_head( dArcYCWVar.head());
 
                                 if ( a != sb) {
                                         b->set_sister( sa);
@@ -444,9 +339,9 @@ class MCMF_YCW
                                         sb->set_sister( a);
                                 }
 
-                                d_cap = _cap[ a - _arcs];
-                                _cap[ a - _arcs] = _cap[ b - _arcs];
-                                _cap[ b - _arcs] = d_cap;
+                                d_cap = capArrayYCWVar[ a - arcsArrayYCWVar];
+                                capArrayYCWVar[ a - arcsArrayYCWVar] = capArrayYCWVar[ b - arcsArrayYCWVar];
+                                capArrayYCWVar[ b - arcsArrayYCWVar] = d_cap;
                         }
                 }
 };
