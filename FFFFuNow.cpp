@@ -1570,7 +1570,7 @@ void MCMF_YCW::print_solution(string& result) {
 
                 //在路径上删除最小流量
                 for(int k=0; k<edgePath.size(); k++) {
-                        edgePath[k]->_rez_capacity += minFlowOfPath;
+                        edgePath[k]->rezCapacityARCVar += minFlowOfPath;
                 }
         }
         //确定当前路径的每个服务器的档次
