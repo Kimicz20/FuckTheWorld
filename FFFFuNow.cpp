@@ -1,14 +1,5 @@
 #include "mcmf.h"
 
-void MCMF_YCW::err_end( int cc) {
-	// abnormal finish
-	printf ("\nError %d\n", cc );
-	// 2 - problem is unfeasible
-	// 5 - allocation fault
-	// 6 - price overflow
-	exit( cc);
-}
-
 void MCMF_YCW::allocate_arrays() {
 	// (1) allocate memory for 'nodes', 'arcs' and internal arrays;
 
@@ -52,21 +43,8 @@ void MCMF_YCW::deallocate_arrays() {
 void MCMF_YCW::set_arc( long tail_node_id, long head_node_id,
                         long low_bound, long up_bound, // up_bound is basically capacity;
                         price_t cost) {
-	// DIMACS format:
-	// c arc has <tail> <head> <capacity l.b.> <capacity u.b> <cost>
-
-	if ( tail_node_id < 0 || tail_node_id > _n ||
-	        head_node_id < 0 || head_node_id > _n ) {
-		printf("Error:  Arc with head or tail out of bounds inside CS2\n");
-		exit( 1);
-	}
 	if ( up_bound < 0 ) {
 		up_bound = MAX_32;
-		printf("Warning:  Infinite capacity replaced by BIGGEST_FLOW\n");
-	}
-	if ( low_bound < 0 || low_bound > up_bound ) {
-		printf("Error:  Wrong capacity bounds inside CS2\n");
-		exit( 1);
 	}
 
 	// no of arcs incident to node i is placed in _arc_first[i+1]
@@ -109,10 +87,6 @@ void MCMF_YCW::set_arc( long tail_node_id, long head_node_id,
 
 void MCMF_YCW::set_supply_demand_of_node( long id, long excess) {
 	// set supply and demand of nodes; not used for transhipment nodes;
-	if ( id < 0 || id > _n ) {
-		printf("Error:  Unbalanced problem inside CS2\n");
-		exit( 1);
-	}
 	(_nodes + id)->set_excess( excess);
 	if ( excess > 0) _total_p += excess;
 	if ( excess < 0) _total_n -= excess;
@@ -130,11 +104,6 @@ void MCMF_YCW::pre_processing() {
 	price_t cost; // arc cost;
 	excess_t cap_out; // sum of outgoing capacities
 	excess_t cap_in; // sum of incoming capacities
-
-	if ( ABS( _total_p - _total_n ) > 0.5 ) {
-		printf("Error:  Unbalanced problem inside CS2\n");
-		exit( 1);
-	}
 
 	// first arc from the first node
 	( _nodes + _node_min )->set_first( _arcs );
@@ -223,10 +192,6 @@ void MCMF_YCW::pre_processing() {
 				cap_in += _cap[ _arc_current->sister() - _arcs ];
 		}
 	}
-	if ( _node_min < 0 || _node_min > 1 ) {
-		printf("Error:  Node ids must start from 0 or 1 inside CS2\n");
-		exit( 1);
-	}
 
 	// adjustments due to nodes' ids being between _node_min - _node_max;
 	_n = _node_max - _node_min + 1;
@@ -290,17 +255,12 @@ void MCMF_YCW::cs2_initialize() {
 			}
 		}
 	}
-
-	if ((double) _max_cost * (double) _dn > MAX_64) {
-		printf("Warning:  Arc lengths too large, overflow possible\n");
-	}
 	_mmc = _max_cost * _dn;
 
 	_linf = (long) (_dn * ceil(_f_scale) + 2);
 
 	_buckets = (BUCKET*) calloc ( _linf, sizeof(BUCKET));
-	if ( _buckets == NULL )
-		err_end( ALLOCATION_FAULT);
+
 
 	_l_bucket = _buckets + _linf;
 
@@ -319,7 +279,7 @@ void MCMF_YCW::cs2_initialize() {
 
 	_cut_off_factor = CUT_OFF_COEF * pow( (double)_n, CUT_OFF_POWER);
 
-	_cut_off_factor = MAX( _cut_off_factor, CUT_OFF_MIN);
+	_cut_off_factor = _cut_off_factor > CUT_OFF_MIN  ?  _cut_off_factor : CUT_OFF_MIN;
 
 	_n_ref = 0;
 
@@ -507,10 +467,8 @@ int MCMF_YCW::relabel( NODE *i) {
 			} else {
 				if ( _n_ref == 1 ) {
 					return -1;
-					err_end( UNFEASIBLE );
 				} else {
 					return -1;
-					err_end( PRICE_OFL );
 				}
 			}
 		} else { // node can't be relabelled because of suspended arcs;
@@ -545,7 +503,7 @@ void MCMF_YCW::discharge( NODE *i) {
 		j_exc = j->excess();
 		if ( j_exc >= 0 ) {
 
-			df = MIN( i->excess(), a->rez_capacity() );
+			df =  i->excess() < a->rez_capacity()?i->excess():a->rez_capacity();
 			if ( j_exc == 0) _n_src++;
 			increase_flow( i, j, a, df ); // INCREASE_FLOW
 			_n_push ++;
@@ -555,7 +513,7 @@ void MCMF_YCW::discharge( NODE *i) {
 			}
 		} else { // j_exc < 0;
 
-			df = MIN( i->excess(), a->rez_capacity() );
+			df = i->excess() < a->rez_capacity()?i->excess():a->rez_capacity();
 			increase_flow( i, j, a, df ); // INCREASE_FLOW
 			_n_push ++;
 
@@ -664,10 +622,10 @@ restart:
 		insert_to_excess_q( _dummy_node );
 	}
 
-	if ( _time_for_price_in == TIME_FOR_PRICE_IN2)
-		_time_for_price_in = TIME_FOR_PRICE_IN3;
-	if ( _time_for_price_in == TIME_FOR_PRICE_IN1)
-		_time_for_price_in = TIME_FOR_PRICE_IN2;
+	if ( _time_for_price_in == 4)
+		_time_for_price_in = 6;
+	if ( _time_for_price_in == 2)
+		_time_for_price_in = 4;
 
 	return ( n_in_bad);
 }
@@ -692,7 +650,7 @@ int MCMF_YCW::refine() {
 	_n_src = 0;
 	reset_excess_q();
 
-	_time_for_price_in = TIME_FOR_PRICE_IN1;
+	_time_for_price_in = 2;
 
 	for ( i = _nodes; i != _sentinel_node; i ++ ) {
 		i->set_current( i->first());
@@ -743,9 +701,7 @@ int MCMF_YCW::refine() {
 
 				while ( _flag_updt ) {
 					if ( _n_ref == 1 ) {
-						// cout<<"refine"<<endl;
 						return -1;
-//						err_end( UNFEASIBLE );
 					} else {
 						_flag_updt = 0;
 						update_cut_off();
@@ -798,7 +754,7 @@ int MCMF_YCW::price_refine() {
 	cc = 1;
 	snc = 0;
 
-	_snc_max = ( _n_ref >= START_CYCLE_CANCEL) ? MAX_CYCLES_CANCELLED : 0;
+	_snc_max = 0;
 
 
 	// (1) main loop
@@ -808,26 +764,26 @@ int MCMF_YCW::price_refine() {
 		nnc = 0;
 		for ( i = _nodes; i != _sentinel_node; i ++ ) {
 			i->set_rank( 0);
-			i->set_inp( WHITE);
+			i->set_inp( 0);
 			i->set_current( i->first());
 		}
 		reset_stackq();
 
 		for ( i = _nodes; i != _sentinel_node; i ++ ) {
-			if ( i->inp() == BLACK ) continue;
+			if ( i->inp() == 2 ) continue;
 
 			i->set_b_next( NULL);
 
 			// deapth first search
 			while ( 1 ) {
-				i->set_inp( GREY);
+				i->set_inp(1);
 
 				// scanning arcs from node i starting from current
 				for ( a = i->current(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
 					if ( (a->rez_capacity() > 0) ) {
 						j = a->head();
 						if ( i->price() + a->cost() - j->price() < 0 ) {
-							if ( j->inp() == WHITE ) { // fresh node  - step forward
+							if ( j->inp() == 0 ) { // fresh node  - step forward
 								i->set_current( a);
 								j->set_b_next( i);
 								i = j;
@@ -836,12 +792,12 @@ int MCMF_YCW::price_refine() {
 								break;
 							}
 
-							if ( j->inp() == GREY ) { // cycle detected
+							if ( j->inp() == 1 ) { // cycle detected
 								cc = 0;
 								nnc ++;
 								i->set_current( a);
 								is = ir = i;
-								df = MAX_32;
+								df = 0x7fffffff;
 
 								while ( 1 ) {
 									ar = ir->current();
@@ -864,7 +820,7 @@ int MCMF_YCW::price_refine() {
 
 								if ( is != i ) {
 									for ( ir = i; ir != is; ir = ir->b_next() ) {
-										ir->set_inp( WHITE);
+										ir->set_inp( 0);
 									}
 									i = is;
 									a = is->current() + 1;
@@ -879,7 +835,7 @@ int MCMF_YCW::price_refine() {
 
 				if ( a == a_stop ) {
 					// step back
-					i->set_inp( BLACK);
+					i->set_inp( 2);
 					_n_prscan1 ++;
 					j = i->b_next();
 					stackq_push( i );
@@ -1039,25 +995,25 @@ void MCMF_YCW::compute_prices() {
 
 		for ( i = _nodes; i != _sentinel_node; i ++) {
 			i->set_rank( 0);
-			i->set_inp( WHITE);
+			i->set_inp( 0);
 			i->set_current( i->first());
 		}
 		reset_stackq();
 
 		for ( i = _nodes; i != _sentinel_node; i ++ ) {
-			if ( i->inp() == BLACK ) continue;
+			if ( i->inp() == 2 ) continue;
 
 			i->set_b_next( NULL);
 			// depth first search
 			while ( 1 ) {
-				i->set_inp( GREY);
+				i->set_inp( 1);
 
 				// scanning arcs from node i
 				for ( a = i->suspended(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
 					if (a->rez_capacity() > 0) {
 						j = a->head();
 						if ( i->price() + a->cost() - j->price() < 0 ) {
-							if ( j->inp() == WHITE ) { // fresh node  - step forward
+							if ( j->inp() == 0 ) { // fresh node  - step forward
 								i->set_current( a);
 								j->set_b_next( i);
 								i = j;
@@ -1066,7 +1022,7 @@ void MCMF_YCW::compute_prices() {
 								break;
 							}
 
-							if ( j->inp() == GREY ) { // cycle detected; should not happen
+							if ( j->inp() == 1 ) { // cycle detected; should not happen
 								cc = 0;
 							}
 						}
@@ -1076,7 +1032,7 @@ void MCMF_YCW::compute_prices() {
 
 				if ( a == a_stop ) {
 					// step back
-					i->set_inp( BLACK);
+					i->set_inp( 2);
 					_n_prscan1 ++;
 					j = i->b_next();
 					stackq_push( i );
@@ -1097,7 +1053,6 @@ void MCMF_YCW::compute_prices() {
 
 		while ( nonempty_stackq() ) {
 			_n_prscan2 ++;
-			// STACKQ_POP( i );
 			i = _excq_first;				
 			_excq_first = i -> q_next();			
 			i ->set_q_next( _sentinel_node );
@@ -1269,7 +1224,7 @@ void MCMF_YCW::cs_cost_reinit() {
 
 	rc = 0;
 	for ( i = _nodes; i != _sentinel_node; i ++) {
-		rc = MIN(rc, i->price());
+		rc = rc < i->price()?rc:i->price();
 		i->set_first( i->suspended());
 		i->set_current( i->first());
 		i->set_q_next( _sentinel_node);
@@ -1290,7 +1245,7 @@ void MCMF_YCW::cs_cost_reinit() {
 		minc = 0;
 		for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
 			if ( ((a->rez_capacity() > 0) && ((rc = i->price() + a->cost() - a->head()->price()) < 0)) )
-				minc = MAX( _epsilon, -rc);
+				minc =  _epsilon > -rc?_epsilon:-rc;
 		}
 		sum += minc;
 	}
@@ -1299,7 +1254,7 @@ void MCMF_YCW::cs_cost_reinit() {
 
 	_cut_off_factor = CUT_OFF_COEF * pow((double)_n, CUT_OFF_POWER);
 
-	_cut_off_factor = MAX( _cut_off_factor, CUT_OFF_MIN);
+	_cut_off_factor =  _cut_off_factor > CUT_OFF_MIN ? _cut_off_factor:CUT_OFF_MIN;
 
 	_n_ref = 0;
 
@@ -1319,18 +1274,11 @@ void MCMF_YCW::cs2_cost_restart( double *objective_cost) {
 
 	int cc; // for storing return code;
 
-	printf("c \nc ******************************\n");
-	printf("c Restarting after a cost update\n");
-	printf("c ******************************\nc\n");
-
 	cs_cost_reinit();
 
-	printf ("c Init. epsilon = %6.0f\n", _epsilon);
 	cc = update_epsilon();
 
-	if (cc != 0) {
-		printf("c Old solution is optimal\n");
-	} else {
+	if (cc == 0) {
 		do { // scaling loop
 			while ( 1 ) {
 				if ( ! price_refine() )
@@ -1355,8 +1303,6 @@ void MCMF_YCW::cs2_cost_restart( double *objective_cost) {
 
 	finishup( objective_cost );
 }
-
-
 
 
 void MCMF_YCW::finishup( double *objective_cost) {
@@ -1439,103 +1385,7 @@ void MCMF_YCW::cs2( double *objective_cost) {
 	finishup( objective_cost );
 }
 
-int MCMF_YCW::run_cs2()
-{
-	// example of flow network in DIMACS format:
-	//
-	//"p min 6 8
-	//c min-cost flow problem with 6 nodes and 8 arcs
-	//n 1 10
-	//c supply of 10 at node 1
-	//n 6 -10
-	//c demand of 10 at node 6
-	//c arc list follows
-	//c arc has <tail> <head> <capacity l.b.> <capacity u.b> <cost>
-	//a 1 2 0 4 1
-	//a 1 3 0 8 5
-	//a 2 3 0 5 0
-	//a 3 5 0 10 1
-	//a 5 4 0 8 0
-	//a 5 6 0 8 9
-	//a 4 2 0 8 1
-	//a 4 6 0 8 1"
-	//
-	// in order to solve this flow problem we have to follow these steps:
-	// 1. ctor of MCMF_YCW // sets num of nodes and arcs
-	//                     // it also calls allocate_arrays()
-	// 2. call set_arc() for each arc
-	// 3. call set_supply_demand_of_node() for non-transhipment nodes
-	// 4. pre_processing()
-	// 5. cs2_initialize()
-	// 6. cs2()
-	// 7. retreive results
-	//
-	// this function is basically a wrapper to implement steps 4, 5, 6;
 
-	double objective_cost;
-
-
-	// (4) ordering, etc.;
-	pre_processing();
-
-
-	// () CHECK_SOLUTION?
-	if ( _check_solution == true) {
-		_node_balance = (long long int *) calloc (_n+1, sizeof(long long int));
-		for ( NODE *i = _nodes; i < _nodes + _n; i ++ ) {
-			_node_balance[i - _nodes] = i->excess();
-		}
-	}
-
-
-	// (5) initializations;
-	_m = 2 * _m;
-	cs2_initialize(); // works already with 2*m;
-//	print_graph(); // exit(1); // debug;
-
-	printf("\nc CS 4.3\n");
-	printf("c nodes: %ld  arcs: %ld\n", _n, _m/2 );
-	printf("c scale-factor: %f  cut-off-factor: %f\nc\n",
-		   _f_scale, _cut_off_factor);
-
-	
-	// (6) run CS2;
-	cs2( &objective_cost );
-	double t = 0.0;
-  
-	printf("c time:         %15.2f    cost:       %15.0f\n", t, objective_cost);
-	printf("c refines:      %10ld     discharges: %10ld\n", _n_refine, _n_discharge);
-	printf("c pushes:       %10ld     relabels:   %10ld\n", _n_push, _n_relabel);
-	printf("c updates:      %10ld     u-scans:    %10ld\n", _n_update, _n_scan);
-	printf("c p-refines:    %10ld     r-scans:    %10ld\n", _n_prefine, _n_prscan);
-	printf("c dfs-scans:    %10ld     bad-in:     %4ld  + %2ld\n",
-		   _n_prscan1, _n_bad_pricein, _n_bad_relabel);
-  
-
-	// () CHECK_SOLUTION?
-	if ( _check_solution == true ) {
-		printf("c checking feasibility...\n"); 
-//		if ( check_feas() )
-//			printf("c ...OK\n");
-//		else
-//			printf("c ERROR: solution infeasible\n");
-//		printf("c computing prices and checking CS...\n");
-		compute_prices();
-//		if ( check_cs() )
-//			printf("c ...OK\n");
-//		else
-//			printf("ERROR: CS violation\n");
-	}
-
-	// () PRINT_ANS?
-	/*if ( _print_ans == true ) {
-		print_solution();
-	}*/
-
-	// () cleanup;
-//	deallocate_arrays();
-	return 0;
-}
 int MCMF_YCW::greenTea() {
 
 
@@ -1543,12 +1393,8 @@ int MCMF_YCW::greenTea() {
 
 
 	// (4) ordering, etc.;
-//	pre_processing();
-	// printf("2_n:%d\n",_n);
+
 	pre_processing();
-	// printf("3_n:%d\n",_n);
-
-
 
 	// () CHECK_SOLUTION?
 	if ( _check_solution == true) {
@@ -1562,13 +1408,6 @@ int MCMF_YCW::greenTea() {
 	// (5) initializations;
 	_m = 2 * _m;
 	cs2_initialize(); // works already with 2*m;
-//	print_graph(); // exit(1); // debug;
-
-	/*printf("\nc CS 4.3\n");
-	printf("c nodes: %ld  arcs: %ld\n", _n, _m/2 );
-	printf("c scale-factor: %f  cut-off-factor: %f\nc\n",
-	       _f_scale, _cut_off_factor);*/
-
 
 	// (6) run CS2;
 	cs2( &objective_cost );
@@ -1576,7 +1415,6 @@ int MCMF_YCW::greenTea() {
 
 	if(objective_cost<0){
 		if(!isOutputResult){
-			// () cleanup;
 			deallocate_arrays();
 		}
 		
@@ -1703,37 +1541,29 @@ void MCMF_YCW::print_solution(string& result) {
 	
 	while(true) {
 		NODE* u = _nodes + _n - 1;
-//		cout<<u-_nodes<<endl;
 		long minFlowOfPath = 10000;
 		edgePath.clear();
 		while(!((u-_nodes)>=netStates&&(u-_nodes)<=(_n-2))) {
 			path[pathNum].push_back(u-_nodes);
-//			cout<<u-_nodes<<endl;
 			ARC* a = u->suspended();
 			while(a != (u+1)->suspended()) {
 				if((_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity()) > 0) {
-					minFlowOfPath = min(minFlowOfPath,_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity());
+					minFlowOfPath = minFlowOfPath < (_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity()) ? minFlowOfPath:(_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity());
 
 					edgePath.push_back(a) ;
-//					cout<<"之前"<<u-_nodes<<endl;
-//					cout<<"tail"<<a->_cost<<endl;
 					u = a->head();
-//					cout<<"之后"<<u-_nodes<<endl;
 					break;
 				}
-//			cout<<"之后"<<a->head()-_nodes<<endl;
 				++a;
 			}
 			if(u == _nodes + _n - 1) {
 				flag = true;
 				break;
 			}
-//			cout<<"hahaha"<<endl;
 		}
 		if(flag) {
 			break;
 		}
-//		cout<<"消费点："<<u-_nodes<<endl;
 		path[pathNum].push_back(u-_nodes);
 		pathNum++;
 		pathFlow.push_back(minFlowOfPath);
@@ -1755,11 +1585,8 @@ void MCMF_YCW::print_solution(string& result) {
 	 	for(int j=1;j<path[i].size();j++){
 	 		sprintf(c,"%d ",path[i][j]>=netStates?(path[i][j]-netStates):path[i][j]);
 	 		result += c;
-//	 		cout<<path[i][j]<<" ";
 		 }
-//		 cout<<endl;
 		 sprintf(c,"%d %d\n",pathFlow[i],server_dc_map[path[i][1]]);
 		 result += c;
 	 }
-	// cout<<result;
 }
