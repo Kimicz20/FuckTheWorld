@@ -63,18 +63,6 @@ using namespace std;
 #define TIME_FOR_PRICE_IN2    4
 #define TIME_FOR_PRICE_IN3    6
 
-#define MAX_CYCLES_CANCELLED 0
-#define START_CYCLE_CANCEL   100
-
-#define WHITE 0
-#define GREY  1
-#define BLACK 2
-
-// 宏定义
-#define MAX( x, y ) ( ( (x) > (y) ) ?  x : y )
-#define MIN( x, y ) ( ( (x) < (y) ) ? x : y )
-#define ABS( x ) ( (x) >= 0 ) ? (x) : -(x)
-
 class MCMF_YCW
 {
 	public:
@@ -325,7 +313,6 @@ class MCMF_YCW
 		}
 		~MCMF_YCW() {}
 
-		void err_end( int cc);
 		void allocate_arrays();
 		void deallocate_arrays();
 		void set_arc( long tail_node_id, long head_node_id,
@@ -436,7 +423,7 @@ class MCMF_YCW
 		void update_cut_off() {
 			if ( _n_bad_pricein + _n_bad_relabel == 0) {
 				_cut_off_factor = CUT_OFF_COEF2 * pow( (double)_n, CUT_OFF_POWER2 );
-				_cut_off_factor = MAX ( _cut_off_factor, CUT_OFF_MIN );
+				_cut_off_factor = _cut_off_factor > CUT_OFF_MIN ? _cut_off_factor:CUT_OFF_MIN;
 				_cut_off = _cut_off_factor * _epsilon;
 				_cut_on = _cut_off * CUT_OFF_GAP;
 			} else {
