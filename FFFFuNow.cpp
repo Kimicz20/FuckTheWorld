@@ -1,1447 +1,1447 @@
 #include "mcmf.h"
 
 void MCMF_YCW::allocate_arrays() {
-	// (1) allocate memory for 'nodes', 'arcs' and internal arrays;
+        // (1) allocate memory for 'nodes', 'arcs' and internal arrays;
 
-	_nodes = (NODE*) calloc ( _n+2,   sizeof(NODE) );
-	_arcs = (ARC*)  calloc ( 2*_m+1, sizeof(ARC) );
-	_cap = (long*) calloc ( 2*_m,   sizeof(long) );
+        _nodes = (NODE*) calloc ( _n+2,   sizeof(NODE) );
+        _arcs = (ARC*)  calloc ( 2*_m+1, sizeof(ARC) );
+        _cap = (long*) calloc ( 2*_m,   sizeof(long) );
 
-	_arc_tail = (long*) calloc ( 2*_m,   sizeof(long) );
-	_arc_first = (long*) calloc ( _n+2,   sizeof(long) );
-	// arc_first [ 0 .. n+1 ] = 0 - initialized by calloc;
+        _arc_tail = (long*) calloc ( 2*_m,   sizeof(long) );
+        _arc_first = (long*) calloc ( _n+2,   sizeof(long) );
+        // arc_first [ 0 .. n+1 ] = 0 - initialized by calloc;
 
-	for ( NODE *in = _nodes; in <= _nodes + _n; in ++ ) {
-		in->set_excess( 0);
-	}
-	if ( _nodes == NULL || _arcs == NULL || _arc_first == NULL || _arc_tail == NULL) {
-		printf("Error:  Memory allocation problem inside CS2\n");
-		exit( 1);
-	}
+        for ( NODE *in = _nodes; in <= _nodes + _n; in ++ ) {
+                in->set_excess( 0);
+        }
+        if ( _nodes == NULL || _arcs == NULL || _arc_first == NULL || _arc_tail == NULL) {
+                printf("Error:  Memory allocation problem inside CS2\n");
+                exit( 1);
+        }
 
-	// (2) resets;
-	_pos_current = 0;
-	_arc_current = _arcs; // set "current" pointer to the first arc
-	_node_max = 0;
-	_node_min = _n;
-	_max_cost = 0;
-	_total_p = _total_n = 0;
+        // (2) resets;
+        _pos_current = 0;
+        _arc_current = _arcs; // set "current" pointer to the first arc
+        _node_max = 0;
+        _node_min = _n;
+        _max_cost = 0;
+        _total_p = _total_n = 0;
 }
 
 void MCMF_YCW::deallocate_arrays() {
-	if ( _arcs) free ( _arcs );
-	if ( _dnode) delete _dnode;
-	if ( _cap) free ( _cap );
-	if ( _buckets) free ( _buckets );
-	if ( _check_solution == true) free ( _node_balance );
-	if ( _nodes) {
-		_nodes = _nodes - _node_min;
-		free ( _nodes );
-	}
+        if ( _arcs) free ( _arcs );
+        if ( _dnode) delete _dnode;
+        if ( _cap) free ( _cap );
+        if ( _buckets) free ( _buckets );
+        if ( _check_solution == true) free ( _node_balance );
+        if ( _nodes) {
+                _nodes = _nodes - _node_min;
+                free ( _nodes );
+        }
 }
 
 void MCMF_YCW::set_arc( long tail_node_id, long head_node_id,
                         long low_bound, long up_bound, // up_bound is basically capacity;
-                        price_t cost) {
-	if ( up_bound < 0 ) {
-		up_bound = MAX_32;
-	}
+                        priceType cost) {
+        if ( up_bound < 0 ) {
+                up_bound = MAX_32;
+        }
 
-	// no of arcs incident to node i is placed in _arc_first[i+1]
-	_arc_first[tail_node_id + 1] ++;
-	_arc_first[head_node_id + 1] ++;
-	_i_node = _nodes + tail_node_id;
-	_j_node = _nodes + head_node_id;
+        // no of arcs incident to node i is placed in _arc_first[i+1]
+        _arc_first[tail_node_id + 1] ++;
+        _arc_first[head_node_id + 1] ++;
+        _i_node = _nodes + tail_node_id;
+        _j_node = _nodes + head_node_id;
 
-	// store information about the arc
-	_arc_tail[_pos_current]   = tail_node_id;
-	_arc_tail[_pos_current+1] = head_node_id;
-	_arc_current->set_head( _j_node );
-	_arc_current->set_rez_capacity( up_bound - low_bound );
-	_cap[_pos_current] = up_bound;
-	_arc_current->set_cost( cost );
+        // store information about the arc
+        _arc_tail[_pos_current]   = tail_node_id;
+        _arc_tail[_pos_current+1] = head_node_id;
+        _arc_current->set_head( _j_node );
+        _arc_current->set_rez_capacity( up_bound - low_bound );
+        _cap[_pos_current] = up_bound;
+        _arc_current->set_cost( cost );
 
-	_arc_current->set_sister( _arc_current + 1 );
-	( _arc_current + 1 )->set_head( _nodes + tail_node_id );
-	( _arc_current + 1 )->set_rez_capacity( 0 );
-	_cap[_pos_current+1] = 0;
-	( _arc_current + 1 )->set_cost( -cost );
-	( _arc_current + 1 )->set_sister( _arc_current );
+        _arc_current->set_sister( _arc_current + 1 );
+        ( _arc_current + 1 )->set_head( _nodes + tail_node_id );
+        ( _arc_current + 1 )->set_rez_capacity( 0 );
+        _cap[_pos_current+1] = 0;
+        ( _arc_current + 1 )->set_cost( -cost );
+        ( _arc_current + 1 )->set_sister( _arc_current );
 
-	_i_node->dec_excess( low_bound );
-	_j_node->inc_excess( low_bound );
+        _i_node->dec_excess( low_bound );
+        _j_node->inc_excess( low_bound );
 
-	// searching for minimum and maximum node
-	if ( head_node_id < _node_min ) _node_min = head_node_id;
-	if ( tail_node_id < _node_min ) _node_min = tail_node_id;
-	if ( head_node_id > _node_max ) _node_max = head_node_id;
-	if ( tail_node_id > _node_max ) _node_max = tail_node_id;
+        // searching for minimum and maximum node
+        if ( head_node_id < _node_min ) _node_min = head_node_id;
+        if ( tail_node_id < _node_min ) _node_min = tail_node_id;
+        if ( head_node_id > _node_max ) _node_max = head_node_id;
+        if ( tail_node_id > _node_max ) _node_max = tail_node_id;
 
-	if ( cost < 0 ) cost = -cost;
-	if ( cost > _max_cost && up_bound > 0 ) _max_cost = cost;
+        if ( cost < 0 ) cost = -cost;
+        if ( cost > _max_cost && up_bound > 0 ) _max_cost = cost;
 
-	// prepare for next arc to be added;
-	_arc_current += 2;
-	_pos_current += 2;
+        // prepare for next arc to be added;
+        _arc_current += 2;
+        _pos_current += 2;
 }
 
 void MCMF_YCW::set_supply_demand_of_node( long id, long excess) {
-	// set supply and demand of nodes; not used for transhipment nodes;
-	(_nodes + id)->set_excess( excess);
-	if ( excess > 0) _total_p += excess;
-	if ( excess < 0) _total_n -= excess;
+        // set supply and demand of nodes; not used for transhipment nodes;
+        (_nodes + id)->set_excess( excess);
+        if ( excess > 0) _total_p += excess;
+        if ( excess < 0) _total_n -= excess;
 }
 
 void MCMF_YCW::pre_processing() {
-	// called after the arcs were just added and before run_cs2();
-	// ordering arcs - linear time algorithm;
-	long i;
-	long last, arc_num, arc_new_num;;
-	long tail_node_id;
-	NODE *head_p;
-	ARC *arc_new, *arc_tmp;
-	long up_bound;
-	price_t cost; // arc cost;
-	excess_t cap_out; // sum of outgoing capacities
-	excess_t cap_in; // sum of incoming capacities
+        // called after the arcs were just added and before run_cs2();
+        // ordering arcs - linear time algorithm;
+        long i;
+        long last, arc_num, arc_new_num;;
+        long tail_node_id;
+        NODE *head_p;
+        ARC *arc_new, *arc_tmp;
+        long up_bound;
+        priceType cost; // arc cost;
+        excessType cap_out; // sum of outgoing capacities
+        excessType cap_in; // sum of incoming capacities
 
-	// first arc from the first node
-	( _nodes + _node_min )->set_first( _arcs );
+        // first arc from the first node
+        ( _nodes + _node_min )->set_first( _arcs );
 
-	// before below loop arc_first[i+1] is the number of arcs outgoing from i;
-	// after this loop arc_first[i] is the position of the first
-	// outgoing from node i arcs after they would be ordered;
-	// this value is transformed to pointer and written to node.first[i]
-	for ( i = _node_min + 1; i <= _node_max + 1; i ++ ) {
-		_arc_first[i] += _arc_first[i-1];
-		( _nodes + i )->set_first( _arcs + _arc_first[i] );
-	}
+        // before below loop arc_first[i+1] is the number of arcs outgoing from i;
+        // after this loop arc_first[i] is the position of the first
+        // outgoing from node i arcs after they would be ordered;
+        // this value is transformed to pointer and written to node.first[i]
+        for ( i = _node_min + 1; i <= _node_max + 1; i ++ ) {
+                _arc_first[i] += _arc_first[i-1];
+                ( _nodes + i )->set_first( _arcs + _arc_first[i] );
+        }
 
-	// scanning all the nodes except the last
-	for ( i = _node_min; i < _node_max; i ++ ) {
+        // scanning all the nodes except the last
+        for ( i = _node_min; i < _node_max; i ++ ) {
 
-		last = ( ( _nodes + i + 1 )->first() ) - _arcs;
-		// arcs outgoing from i must be cited
-		// from position arc_first[i] to the position
-		// equal to initial value of arc_first[i+1]-1
+                last = ( ( _nodes + i + 1 )->first() ) - _arcs;
+                // arcs outgoing from i must be cited
+                // from position arc_first[i] to the position
+                // equal to initial value of arc_first[i+1]-1
 
-		for ( arc_num = _arc_first[i]; arc_num < last; arc_num ++ ) {
-			tail_node_id = _arc_tail[arc_num];
+                for ( arc_num = _arc_first[i]; arc_num < last; arc_num ++ ) {
+                        tail_node_id = _arc_tail[arc_num];
 
-			while ( tail_node_id != i ) {
-				// the arc no  arc_num  is not in place because arc cited here
-				// must go out from i;
-				// we'll put it to its place and continue this process
-				// until an arc in this position would go out from i
+                        while ( tail_node_id != i ) {
+                                // the arc no  arc_num  is not in place because arc cited here
+                                // must go out from i;
+                                // we'll put it to its place and continue this process
+                                // until an arc in this position would go out from i
 
-				arc_new_num = _arc_first[tail_node_id];
-				_arc_current = _arcs + arc_num;
-				arc_new = _arcs + arc_new_num;
+                                arc_new_num = _arc_first[tail_node_id];
+                                _arc_current = _arcs + arc_num;
+                                arc_new = _arcs + arc_new_num;
 
-				// arc_current must be cited in the position arc_new
-				// swapping these arcs:
+                                // arc_current must be cited in the position arc_new
+                                // swapping these arcs:
 
-				head_p = arc_new->head();
-				arc_new->set_head( _arc_current->head() );
-				_arc_current->set_head( head_p );
+                                head_p = arc_new->head();
+                                arc_new->set_head( _arc_current->head() );
+                                _arc_current->set_head( head_p );
 
-				up_bound          = _cap[arc_new_num];
-				_cap[arc_new_num] = _cap[arc_num];
-				_cap[arc_num]     = up_bound;
+                                up_bound          = _cap[arc_new_num];
+                                _cap[arc_new_num] = _cap[arc_num];
+                                _cap[arc_num]     = up_bound;
 
-				up_bound = arc_new->rez_capacity();
-				arc_new->set_rez_capacity( _arc_current->rez_capacity() );
-				_arc_current->set_rez_capacity( up_bound) ;
+                                up_bound = arc_new->rez_capacity();
+                                arc_new->set_rez_capacity( _arc_current->rez_capacity() );
+                                _arc_current->set_rez_capacity( up_bound) ;
 
-				cost = arc_new->cost();
-				arc_new->set_cost( _arc_current->cost() );
-				_arc_current->set_cost( cost );
+                                cost = arc_new->cost();
+                                arc_new->set_cost( _arc_current->cost() );
+                                _arc_current->set_cost( cost );
 
-				if ( arc_new != _arc_current->sister() ) {
-					arc_tmp = arc_new->sister();
-					arc_new->set_sister( _arc_current->sister() );
-					_arc_current->set_sister( arc_tmp );
+                                if ( arc_new != _arc_current->sister() ) {
+                                        arc_tmp = arc_new->sister();
+                                        arc_new->set_sister( _arc_current->sister() );
+                                        _arc_current->set_sister( arc_tmp );
 
-					_arc_current->sister()->set_sister( _arc_current );
-					arc_new->sister()->set_sister( arc_new );
-				}
+                                        _arc_current->sister()->set_sister( _arc_current );
+                                        arc_new->sister()->set_sister( arc_new );
+                                }
 
-				_arc_tail[arc_num] = _arc_tail[arc_new_num];
-				_arc_tail[arc_new_num] = tail_node_id;
+                                _arc_tail[arc_num] = _arc_tail[arc_new_num];
+                                _arc_tail[arc_new_num] = tail_node_id;
 
-				// we increase arc_first[tail_node_id]
-				_arc_first[tail_node_id] ++ ;
+                                // we increase arc_first[tail_node_id]
+                                _arc_first[tail_node_id] ++ ;
 
-				tail_node_id = _arc_tail[arc_num];
-			}
-		}
-		// all arcs outgoing from  i  are in place
-	}
-	// arcs are ordered by now!
+                                tail_node_id = _arc_tail[arc_num];
+                        }
+                }
+                // all arcs outgoing from  i  are in place
+        }
+        // arcs are ordered by now!
 
 
-	// testing network for possible excess overflow
-	for ( NODE *ndp = _nodes + _node_min; ndp <= _nodes + _node_max; ndp ++ ) {
-		cap_in  =   ( ndp->excess() );
-		cap_out = - ( ndp->excess() );
-		for ( _arc_current = ndp->first(); _arc_current != (ndp+1)->first();
-		        _arc_current ++ ) {
-			arc_num = _arc_current - _arcs;
-			if ( _cap[arc_num] > 0 ) cap_out += _cap[arc_num];
-			if ( _cap[arc_num] == 0 )
-				cap_in += _cap[ _arc_current->sister() - _arcs ];
-		}
-	}
+        // testing network for possible excess overflow
+        for ( NODE *ndp = _nodes + _node_min; ndp <= _nodes + _node_max; ndp ++ ) {
+                cap_in  =   ( ndp->excess() );
+                cap_out = - ( ndp->excess() );
+                for ( _arc_current = ndp->first(); _arc_current != (ndp+1)->first();
+                        _arc_current ++ ) {
+                        arc_num = _arc_current - _arcs;
+                        if ( _cap[arc_num] > 0 ) cap_out += _cap[arc_num];
+                        if ( _cap[arc_num] == 0 )
+                                cap_in += _cap[ _arc_current->sister() - _arcs ];
+                }
+        }
 
-	// adjustments due to nodes' ids being between _node_min - _node_max;
-	_n = _node_max - _node_min + 1;
-	_nodes = _nodes + _node_min;
+        // adjustments due to nodes' ids being between _node_min - _node_max;
+        _n = _node_max - _node_min + 1;
+        _nodes = _nodes + _node_min;
 
-	// () free internal memory, not needed anymore inside CS2;
-	free ( _arc_first );
-	free ( _arc_tail );
+        // () free internal memory, not needed anymore inside CS2;
+        free ( _arc_first );
+        free ( _arc_tail );
 }
 
 void MCMF_YCW::cs2_initialize() {
-	// initialization;
-	// called after allocate_arrays() and all nodes and arcs have been inputed;
+        // initialization;
+        // called after allocate_arrays() and all nodes and arcs have been inputed;
 
-	NODE *i; // current node
-	ARC *a; // current arc
-	ARC *a_stop;
-	BUCKET *b; // current bucket
-	long df;
+        NODE *i; // current node
+        ARC *a; // current arc
+        ARC *a_stop;
+        BUCKET *b; // current bucket
+        long df;
 
-	_f_scale = (long) SCALE_DEFAULT;
-	_sentinel_node = _nodes + _n;
-	_sentinel_arc  = _arcs + _m;
+        _f_scale = (long) SCALE_DEFAULT;
+        _sentinel_node = _nodes + _n;
+        _sentinel_arc  = _arcs + _m;
 
-	for ( i = _nodes; i != _sentinel_node; i ++ ) {
-		i->set_price( 0);
-		i->set_suspended( i->first());
-		
-		i->set_q_next( _sentinel_node);
-	}
+        for ( i = _nodes; i != _sentinel_node; i ++ ) {
+                i->set_price( 0);
+                i->set_suspended( i->first());
 
-	_sentinel_node->set_first( _sentinel_arc);
-	_sentinel_node->set_suspended( _sentinel_arc);
-	
+                i->set_q_next( _sentinel_node);
+        }
 
-	// saturate negative arcs, e.g. in the circulation problem case
-	for ( i = _nodes; i != _sentinel_node; i ++ ) {
-		for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++ ) {
-			if ( a->cost() < 0) {
-				if ( ( df = a->rez_capacity()) > 0) {
-					increase_flow( i, a->head(), a, df);
-				}
-			}
-		}
-	}
-
-	_dn = _n + 1;
-	if ( _no_zero_cycles == true) { // NO_ZERO_CYCLES
-		_dn = 2 * _dn;
-	}
-
-	for ( a = _arcs; a != _sentinel_arc; a ++ ) {
-		a->multiply_cost( _dn);
-	}
-
-	if ( _no_zero_cycles == true) { // NO_ZERO_CYCLES
-		for ( a = _arcs; a != _sentinel_arc; a ++ ) {
-			if ((a->cost() == 0) && (a->sister()->cost() == 0)) {
-				a->set_cost( 1);
-				a->sister()->set_cost( -1);
-			}
-		}
-	}
-	_mmc = _max_cost * _dn;
-
-	_linf = (long) (_dn * ceil(_f_scale) + 2);
-
-	_buckets = (BUCKET*) calloc ( _linf, sizeof(BUCKET));
+        _sentinel_node->set_first( _sentinel_arc);
+        _sentinel_node->set_suspended( _sentinel_arc);
 
 
-	_l_bucket = _buckets + _linf;
+        // saturate negative arcs, e.g. in the circulation problem case
+        for ( i = _nodes; i != _sentinel_node; i ++ ) {
+                for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++ ) {
+                        if ( a->cost() < 0) {
+                                if ( ( df = a->rez_capacity()) > 0) {
+                                        increase_flow( i, a->head(), a, df);
+                                }
+                        }
+                }
+        }
 
-	_dnode = new NODE; // used as reference;
+        _dn = _n + 1;
+        if ( _no_zero_cycles == true) { // NO_ZERO_CYCLES
+                _dn = 2 * _dn;
+        }
 
-	for ( b = _buckets; b != _l_bucket; b ++ ) {
-		reset_bucket( b);
-	}
+        for ( a = _arcs; a != _sentinel_arc; a ++ ) {
+                a->multiply_cost( _dn);
+        }
 
-	_epsilon = _mmc;
-	if ( _epsilon < 1) {
-		_epsilon = 1;
-	}
+        if ( _no_zero_cycles == true) { // NO_ZERO_CYCLES
+                for ( a = _arcs; a != _sentinel_arc; a ++ ) {
+                        if ((a->cost() == 0) && (a->sister()->cost() == 0)) {
+                                a->set_cost( 1);
+                                a->sister()->set_cost( -1);
+                        }
+                }
+        }
+        _mmc = _max_cost * _dn;
 
-	_price_min = -PRICE_MAX;
+        _linf = (long) (_dn * ceil(_f_scale) + 2);
 
-	_cut_off_factor = CUT_OFF_COEF * pow( (double)_n, CUT_OFF_POWER);
+        _buckets = (BUCKET*) calloc ( _linf, sizeof(BUCKET));
 
-	_cut_off_factor = _cut_off_factor > CUT_OFF_MIN  ?  _cut_off_factor : CUT_OFF_MIN;
 
-	_n_ref = 0;
+        _l_bucket = _buckets + _linf;
 
-	_flag_price = 0;
+        _dnode = new NODE; // used as reference;
 
-	_dummy_node = &_d_node;
+        for ( b = _buckets; b != _l_bucket; b ++ ) {
+                reset_bucket( b);
+        }
 
-	_excq_first = NULL;
+        _epsilon = _mmc;
+        if ( _epsilon < 1) {
+                _epsilon = 1;
+        }
 
-	//print_graph(); // debug;
+        _price_min = -PRICE_MAX;
+
+        _cut_off_factor = CUT_OFF_COEF * pow( (double)_n, CUT_OFF_POWER);
+
+        _cut_off_factor = _cut_off_factor > CUT_OFF_MIN  ?  _cut_off_factor : CUT_OFF_MIN;
+
+        _n_ref = 0;
+
+        _flag_price = 0;
+
+        _dummy_node = &_d_node;
+
+        _excq_first = NULL;
+
+        //print_graph(); // debug;
 }
 
 void MCMF_YCW::up_node_scan( NODE *i) {
-	NODE *j; // opposite node
-	ARC *a; // (i, j)
-	ARC *a_stop; // first arc from the next node
-	ARC *ra; // (j, i)
-	BUCKET *b_old; // old bucket contained j
-	BUCKET *b_new; // new bucket for j
-	long i_rank;
-	long j_rank; // ranks of nodes
-	long j_new_rank;
-	price_t rc; // reduced cost of (j, i)
-	price_t dr; // rank difference
+        NODE *j; // opposite node
+        ARC *a; // (i, j)
+        ARC *a_stop; // first arc from the next node
+        ARC *ra; // (j, i)
+        BUCKET *b_old; // old bucket contained j
+        BUCKET *b_new; // new bucket for j
+        long i_rank;
+        long j_rank; // ranks of nodes
+        long j_new_rank;
+        priceType rc; // reduced cost of (j, i)
+        priceType dr; // rank difference
 
-	_n_scan ++;
+        _n_scan ++;
 
-	i_rank = i->rank();
+        i_rank = i->rank();
 
-	// scanning arcs;
-	for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++ ) {
+        // scanning arcs;
+        for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++ ) {
 
-		ra = a->sister();
+                ra = a->sister();
 
-		if ( ra->rez_capacity() > 0 ) {
-			j = a->head();
-			j_rank = j->rank();
+                if ( ra->rez_capacity() > 0 ) {
+                        j = a->head();
+                        j_rank = j->rank();
 
-			if ( j_rank > i_rank ) {
-				if ( ( rc = j->price() + ra->cost() - i->price() ) < 0 ) {
-					j_new_rank = i_rank;
-				} else {
-					dr = rc / _epsilon;
-					j_new_rank = ( dr < _linf ) ? i_rank + (long)dr + 1 : _linf;
-				}
+                        if ( j_rank > i_rank ) {
+                                if ( ( rc = j->price() + ra->cost() - i->price() ) < 0 ) {
+                                        j_new_rank = i_rank;
+                                } else {
+                                        dr = rc / _epsilon;
+                                        j_new_rank = ( dr < _linf ) ? i_rank + (long)dr + 1 : _linf;
+                                }
 
-				if ( j_rank > j_new_rank ) {
-					j->set_rank( j_new_rank);
-					j->set_current( ra);
+                                if ( j_rank > j_new_rank ) {
+                                        j->set_rank( j_new_rank);
+                                        j->set_current( ra);
 
-					if ( j_rank < _linf ) {
-						b_old = _buckets + j_rank;
-						// REMOVE_FROM_BUCKET( j, b_old );
-						if ( j == ( b_old -> p_first() ) )							
-							b_old ->set_p_first( j -> b_next() );					
-						else													
-						{													
-							( j -> b_prev() )->set_b_next( j -> b_next() );	
-							( j -> b_next() )->set_b_prev( j -> b_prev() );	
-						}
-					}
+                                        if ( j_rank < _linf ) {
+                                                b_old = _buckets + j_rank;
+                                                // REMOVE_FROM_BUCKET( j, b_old );
+                                                if ( j == ( b_old -> p_first() ) )
+                                                        b_old ->set_p_first( j -> b_next() );
+                                                else
+                                                {
+                                                        ( j -> b_prev() )->set_b_next( j -> b_next() );
+                                                        ( j -> b_next() )->set_b_prev( j -> b_prev() );
+                                                }
+                                        }
 
-					b_new = _buckets + j_new_rank;
-					insert_to_bucket( j, b_new );
-				}
-			}
-		}
-	}
+                                        b_new = _buckets + j_new_rank;
+                                        insert_to_bucket( j, b_new );
+                                }
+                        }
+                }
+        }
 
-	i->dec_price( i_rank * _epsilon);
-	i->set_rank( -1);
+        i->dec_price( i_rank * _epsilon);
+        i->set_rank( -1);
 }
 
 void MCMF_YCW::price_update() {
-	register NODE *i;
-	excess_t remain;
-	// total excess of unscanned nodes with positive excess;
-	BUCKET *b; // current bucket;
-	price_t dp; // amount to be subtracted from prices;
+        register NODE *i;
+        excessType remain;
+        // total excess of unscanned nodes with positive excess;
+        BUCKET *b; // current bucket;
+        priceType dp; // amount to be subtracted from prices;
 
-	_n_update ++;
+        _n_update ++;
 
-	for ( i = _nodes; i != _sentinel_node; i ++ ) {
-		if ( i->excess() < 0 ) {
-			insert_to_bucket( i, _buckets );
-			i->set_rank( 0);
-		} else {
-			i->set_rank( _linf);
-		}
-	}
+        for ( i = _nodes; i != _sentinel_node; i ++ ) {
+                if ( i->excess() < 0 ) {
+                        insert_to_bucket( i, _buckets );
+                        i->set_rank( 0);
+                } else {
+                        i->set_rank( _linf);
+                }
+        }
 
-	remain = _total_excess;
-	if ( remain < 0.5 ) return;
+        remain = _total_excess;
+        if ( remain < 0.5 ) return;
 
-	// scanning buckets, main loop;
-	for ( b = _buckets; b != _l_bucket; b ++ ) {
+        // scanning buckets, main loop;
+        for ( b = _buckets; b != _l_bucket; b ++ ) {
 
-		while ( nonempty_bucket( b) ) {
+                while ( nonempty_bucket( b) ) {
 
-			// GET_FROM_BUCKET( i, b );
-			i=(b -> p_first() );
-			b ->set_p_first( i -> b_next() );
-			up_node_scan( i );
+                        // GET_FROM_BUCKET( i, b );
+                        i=(b -> p_first() );
+                        b ->set_p_first( i -> b_next() );
+                        up_node_scan( i );
 
-			if ( i ->excess() > 0 ) {
-				remain -= ( i->excess());
-				if ( remain <= 0 ) break;
-			}
-		}
-		if ( remain <= 0 ) break;
-	}
+                        if ( i ->excess() > 0 ) {
+                                remain -= ( i->excess());
+                                if ( remain <= 0 ) break;
+                        }
+                }
+                if ( remain <= 0 ) break;
+        }
 
-	if ( remain > 0.5 ) _flag_updt = 1;
+        if ( remain > 0.5 ) _flag_updt = 1;
 
-	// finishup
-	// changing prices for nodes which were not scanned during main loop;
-	dp = ( b - _buckets ) * _epsilon;
+        // finishup
+        // changing prices for nodes which were not scanned during main loop;
+        dp = ( b - _buckets ) * _epsilon;
 
-	for ( i = _nodes; i != _sentinel_node; i ++ ) {
+        for ( i = _nodes; i != _sentinel_node; i ++ ) {
 
-		if ( i->rank() >= 0 ) {
-			if ( i->rank() < _linf ) {
-				// REMOVE_FROM_BUCKET( i, ( _buckets + i->rank()) );
-				if ( i == ( ( _buckets + i->rank()) -> p_first() ) )							
-					( _buckets + i->rank()) ->set_p_first( i -> b_next() );					
-				else													
-				{													
-					( i -> b_prev() )->set_b_next( i -> b_next() );	
-					( i -> b_next() )->set_b_prev( i -> b_prev() );	
-				}
-			}
-			if ( i->price() > _price_min ) {
-				i->dec_price( dp);
-			}
-		}
-	}
+                if ( i->rank() >= 0 ) {
+                        if ( i->rank() < _linf ) {
+                                // REMOVE_FROM_BUCKET( i, ( _buckets + i->rank()) );
+                                if ( i == ( ( _buckets + i->rank()) -> p_first() ) )
+                                        ( _buckets + i->rank()) ->set_p_first( i -> b_next() );
+                                else
+                                {
+                                        ( i -> b_prev() )->set_b_next( i -> b_next() );
+                                        ( i -> b_next() )->set_b_prev( i -> b_prev() );
+                                }
+                        }
+                        if ( i->price() > _price_min ) {
+                                i->dec_price( dp);
+                        }
+                }
+        }
 }
 
 int MCMF_YCW::relabel( NODE *i) {
-	register ARC *a; // current arc from i
-	register ARC *a_stop; // first arc from the next node
-	register ARC *a_max; // arc which provides maximum price
-	register price_t p_max; // current maximal price
-	register price_t i_price; // price of node  i
-	register price_t dp; // current arc partial residual cost
+        register ARC *a; // current arc from i
+        register ARC *a_stop; // first arc from the next node
+        register ARC *a_max; // arc which provides maximum price
+        register priceType p_max; // current maximal price
+        register priceType i_price; // price of node  i
+        register priceType dp; // current arc partial residual cost
 
-	p_max = _price_min;
-	i_price = i->price();
+        p_max = _price_min;
+        i_price = i->price();
 
-	a_max = NULL;
+        a_max = NULL;
 
-	// 1/2 arcs are scanned;
-	for ( a = i->current() + 1, a_stop = (i + 1)->suspended(); a != a_stop; a ++ ) {
+        // 1/2 arcs are scanned;
+        for ( a = i->current() + 1, a_stop = (i + 1)->suspended(); a != a_stop; a ++ ) {
 
-		if ( (a->rez_capacity() > 0) && ( (dp = (a->head()->price() - a->cost())) > p_max ) ) {
-			if ( i_price < dp ) {
-				i->set_current( a);
-				return ( 1);
-			}
-			p_max = dp;
-			a_max = a;
-		}
-	}
+                if ( (a->rez_capacity() > 0) && ( (dp = (a->head()->price() - a->cost())) > p_max ) ) {
+                        if ( i_price < dp ) {
+                                i->set_current( a);
+                                return ( 1);
+                        }
+                        p_max = dp;
+                        a_max = a;
+                }
+        }
 
-	// 2/2 arcs are scanned;
-	for ( a = i->first(), a_stop = i->current() + 1; a != a_stop; a ++ ) {
-		if ( (a->rez_capacity() > 0) && ( (dp = (a->head()->price() - a->cost())) > p_max ) ) {
-			if ( i_price < dp ) {
-				i->set_current( a);
-				return ( 1);
-			}
-			p_max = dp;
-			a_max = a;
-		}
-	}
+        // 2/2 arcs are scanned;
+        for ( a = i->first(), a_stop = i->current() + 1; a != a_stop; a ++ ) {
+                if ( (a->rez_capacity() > 0) && ( (dp = (a->head()->price() - a->cost())) > p_max ) ) {
+                        if ( i_price < dp ) {
+                                i->set_current( a);
+                                return ( 1);
+                        }
+                        p_max = dp;
+                        a_max = a;
+                }
+        }
 
-	// finishup
-	if ( p_max != _price_min ) {
-		i->set_price( p_max - _epsilon);
-		i->set_current( a_max);
-	} else { // node can't be relabelled;
-		if ( i->suspended() == i->first() ) {
-			if ( i->excess() == 0 ) {
-				i->set_price( _price_min);
-			} else {
-				if ( _n_ref == 1 ) {
-					return -1;
-				} else {
-					return -1;
-				}
-			}
-		} else { // node can't be relabelled because of suspended arcs;
-			_flag_price = 1;
-		}
-	}
+        // finishup
+        if ( p_max != _price_min ) {
+                i->set_price( p_max - _epsilon);
+                i->set_current( a_max);
+        } else { // node can't be relabelled;
+                if ( i->suspended() == i->first() ) {
+                        if ( i->excess() == 0 ) {
+                                i->set_price( _price_min);
+                        } else {
+                                if ( _n_ref == 1 ) {
+                                        return -1;
+                                } else {
+                                        return -1;
+                                }
+                        }
+                } else { // node can't be relabelled because of suspended arcs;
+                        _flag_price = 1;
+                }
+        }
 
-	_n_relabel ++;
-	_n_rel ++;
-	return ( 0);
+        _n_relabel ++;
+        _n_rel ++;
+        return ( 0);
 }
 
 void MCMF_YCW::discharge( NODE *i) {
-	register ARC *a;// an arc from i
-	register NODE *j; // head of a
-	register long df; // amoumt of flow to be pushed through a
-	excess_t j_exc; // former excess of j
+        register ARC *a;// an arc from i
+        register NODE *j; // head of a
+        register long df; // amoumt of flow to be pushed through a
+        excessType j_exc; // former excess of j
 
-	_n_discharge ++;
+        _n_discharge ++;
 
-	a = i->current();
-	j = a->head();
+        a = i->current();
+        j = a->head();
 
-	if ( !(a->rez_capacity() > 0 && (i->price() + a->cost() < j->price())) ) {
-		relabel( i );
-		a = i->current();
-		j = a->head();
-	}
+        if ( !(a->rez_capacity() > 0 && (i->price() + a->cost() < j->price())) ) {
+                relabel( i );
+                a = i->current();
+                j = a->head();
+        }
 
-	while ( 1 ) {
+        while ( 1 ) {
 
-		j_exc = j->excess();
-		if ( j_exc >= 0 ) {
+                j_exc = j->excess();
+                if ( j_exc >= 0 ) {
 
-			df =  i->excess() < a->rez_capacity()?i->excess():a->rez_capacity();
-			if ( j_exc == 0) _n_src++;
-			increase_flow( i, j, a, df ); // INCREASE_FLOW
-			_n_push ++;
+                        df =  i->excess() < a->rez_capacity()?i->excess():a->rez_capacity();
+                        if ( j_exc == 0) _n_src++;
+                        increase_flow( i, j, a, df ); // INCREASE_FLOW
+                        _n_push ++;
 
-			if ( out_of_excess_q( j ) ) {
-				insert_to_excess_q( j );
-			}
-		} else { // j_exc < 0;
+                        if ( out_of_excess_q( j ) ) {
+                                insert_to_excess_q( j );
+                        }
+                } else { // j_exc < 0;
 
-			df = i->excess() < a->rez_capacity()?i->excess():a->rez_capacity();
-			increase_flow( i, j, a, df ); // INCREASE_FLOW
-			_n_push ++;
+                        df = i->excess() < a->rez_capacity()?i->excess():a->rez_capacity();
+                        increase_flow( i, j, a, df ); // INCREASE_FLOW
+                        _n_push ++;
 
-			if ( j->excess() >= 0 ) {
-				if ( j->excess() > 0 ) {
-					_n_src ++;
-					relabel( j );
-					insert_to_excess_q( j );
-				}
-				_total_excess += j_exc;
-			} else {
-				_total_excess -= df;
-			}
-		}
+                        if ( j->excess() >= 0 ) {
+                                if ( j->excess() > 0 ) {
+                                        _n_src ++;
+                                        relabel( j );
+                                        insert_to_excess_q( j );
+                                }
+                                _total_excess += j_exc;
+                        } else {
+                                _total_excess -= df;
+                        }
+                }
 
-		if ( i->excess() <= 0) _n_src --;
-		if ( i->excess() <= 0 || _flag_price ) break;
+                if ( i->excess() <= 0) _n_src --;
+                if ( i->excess() <= 0 || _flag_price ) break;
 
-		relabel( i );
+                relabel( i );
 
-		a = i->current();
-		j = a->head();
-	}
+                a = i->current();
+                j = a->head();
+        }
 
-	i->set_current( a);
+        i->set_current( a);
 }
 
 int MCMF_YCW::price_in() {
-	NODE *i; // current node
-	NODE *j;
-	ARC *a; // current arc from i
-	ARC *a_stop; // first arc from the next node
-	ARC *b; // arc to be exchanged with suspended
-	ARC *ra; // opposite to a
-	ARC *rb; // opposite to b
-	price_t rc; // reduced cost
-	int n_in_bad; // number of priced_in arcs with negative reduced cost
-	int bad_found; // if 1 we are at the second scan if 0 we are at the first scan
-	excess_t i_exc; // excess of i
-	excess_t df; // an amount to increase flow
+        NODE *i; // current node
+        NODE *j;
+        ARC *a; // current arc from i
+        ARC *a_stop; // first arc from the next node
+        ARC *b; // arc to be exchanged with suspended
+        ARC *ra; // opposite to a
+        ARC *rb; // opposite to b
+        priceType rc; // reduced cost
+        int n_in_bad; // number of priced_in arcs with negative reduced cost
+        int bad_found; // if 1 we are at the second scan if 0 we are at the first scan
+        excessType i_exc; // excess of i
+        excessType df; // an amount to increase flow
 
 
-	bad_found = 0;
-	n_in_bad = 0;
+        bad_found = 0;
+        n_in_bad = 0;
 
 restart:
 
-	for ( i = _nodes; i != _sentinel_node; i ++ ) {
+        for ( i = _nodes; i != _sentinel_node; i ++ ) {
 
-		for ( a = i->first() - 1, a_stop = i->suspended() - 1; a != a_stop; a -- ) {
+                for ( a = i->first() - 1, a_stop = i->suspended() - 1; a != a_stop; a -- ) {
 
-			rc = i->price() + a->cost() - a->head()->price();
-			if ( ( rc < 0) && ( a->rez_capacity() > 0) ) { // bad case;
-				if ( bad_found == 0 ) {
-					bad_found = 1;
-					update_cut_off();
-					goto restart;
-				}
-				df = a->rez_capacity();
-				increase_flow( i, a->head(), a, df );
+                        rc = i->price() + a->cost() - a->head()->price();
+                        if ( ( rc < 0) && ( a->rez_capacity() > 0) ) { // bad case;
+                                if ( bad_found == 0 ) {
+                                        bad_found = 1;
+                                        update_cut_off();
+                                        goto restart;
+                                }
+                                df = a->rez_capacity();
+                                increase_flow( i, a->head(), a, df );
 
-				ra = a->sister();
-				j  = a->head();
+                                ra = a->sister();
+                                j  = a->head();
 
-				i->dec_first();
-				b = i->first();
-				exchange( a, b );
+                                i->dec_first();
+                                b = i->first();
+                                exchange( a, b );
 
-				if ( a < j->first() ) {
-					j->dec_first();
-					rb = j->first();
-					exchange( ra, rb );
-				}
+                                if ( a < j->first() ) {
+                                        j->dec_first();
+                                        rb = j->first();
+                                        exchange( ra, rb );
+                                }
 
-				n_in_bad ++;
-			} else {
-				if ( ( rc < _cut_on ) && ( rc > -_cut_on ) ) {
-					i->dec_first();
-					b = i->first();
-					exchange( a, b );
-				}
-			}
-		}
-	}
+                                n_in_bad ++;
+                        } else {
+                                if ( ( rc < _cut_on ) && ( rc > -_cut_on ) ) {
+                                        i->dec_first();
+                                        b = i->first();
+                                        exchange( a, b );
+                                }
+                        }
+                }
+        }
 
 
-	if ( n_in_bad != 0 ) {
+        if ( n_in_bad != 0 ) {
 
-		_n_bad_pricein ++;
+                _n_bad_pricein ++;
 
-		// recalculating excess queue;
-		_total_excess = 0;
-		_n_src = 0;
-		reset_excess_q();
+                // recalculating excess queue;
+                _total_excess = 0;
+                _n_src = 0;
+                reset_excess_q();
 
-		for ( i = _nodes; i != _sentinel_node; i ++ ) {
-			i->set_current( i->first());
-			i_exc = i->excess();
-			if ( i_exc > 0 ) { // i is a source;
-				_total_excess += i_exc;
-				_n_src ++;
-				insert_to_excess_q( i );
-			}
-		}
+                for ( i = _nodes; i != _sentinel_node; i ++ ) {
+                        i->set_current( i->first());
+                        i_exc = i->excess();
+                        if ( i_exc > 0 ) { // i is a source;
+                                _total_excess += i_exc;
+                                _n_src ++;
+                                insert_to_excess_q( i );
+                        }
+                }
 
-		insert_to_excess_q( _dummy_node );
-	}
+                insert_to_excess_q( _dummy_node );
+        }
 
-	if ( _time_for_price_in == 4)
-		_time_for_price_in = 6;
-	if ( _time_for_price_in == 2)
-		_time_for_price_in = 4;
+        if ( _time_for_price_in == 4)
+                _time_for_price_in = 6;
+        if ( _time_for_price_in == 2)
+                _time_for_price_in = 4;
 
-	return ( n_in_bad);
+        return ( n_in_bad);
 }
 
 int MCMF_YCW::refine() {
-	NODE *i; // current node
-	excess_t i_exc; // excess of i
-	long np, nr, ns; // variables for additional print
-	int pr_in_int; // current number of updates between price_in
+        NODE *i; // current node
+        excessType i_exc; // excess of i
+        long np, nr, ns; // variables for additional print
+        int pr_in_int; // current number of updates between price_in
 
-	np = _n_push;
-	nr = _n_relabel;
-	ns = _n_scan;
+        np = _n_push;
+        nr = _n_relabel;
+        ns = _n_scan;
 
-	_n_refine ++;
-	_n_ref ++;
-	_n_rel = 0;
-	pr_in_int = 0;
+        _n_refine ++;
+        _n_ref ++;
+        _n_rel = 0;
+        pr_in_int = 0;
 
-	// initialize;
-	_total_excess = 0;
-	_n_src = 0;
-	reset_excess_q();
+        // initialize;
+        _total_excess = 0;
+        _n_src = 0;
+        reset_excess_q();
 
-	_time_for_price_in = 2;
+        _time_for_price_in = 2;
 
-	for ( i = _nodes; i != _sentinel_node; i ++ ) {
-		i->set_current( i->first());
-		i_exc = i->excess();
-		if ( i_exc > 0 ) { // i  is a source
-			_total_excess += i_exc;
-			_n_src++;
-			insert_to_excess_q( i );
-		}
-	}
+        for ( i = _nodes; i != _sentinel_node; i ++ ) {
+                i->set_current( i->first());
+                i_exc = i->excess();
+                if ( i_exc > 0 ) { // i  is a source
+                        _total_excess += i_exc;
+                        _n_src++;
+                        insert_to_excess_q( i );
+                }
+        }
 
-	if ( _total_excess <= 0 ) return -2;;
+        if ( _total_excess <= 0 ) return -2;;
 
-	// (2) main loop
+        // (2) main loop
 
-	while ( 1 ) {
+        while ( 1 ) {
 
-		if ( empty_excess_q() ) {
-			if ( _n_ref > PRICE_OUT_START ) {
-				pr_in_int = 0;
-				price_in();
-			}
+                if ( empty_excess_q() ) {
+                        if ( _n_ref > PRICE_OUT_START ) {
+                                pr_in_int = 0;
+                                price_in();
+                        }
 
-			if ( empty_excess_q() ) break;
-		}
+                        if ( empty_excess_q() ) break;
+                }
 
-		// STACKQ_POP( i );
-		i = _excq_first;				
-		_excq_first = i -> q_next();			
-		i ->set_q_next( _sentinel_node );
+                // STACKQ_POP( i );
+                i = _excq_first;
+                _excq_first = i -> q_next();
+                i ->set_q_next( _sentinel_node );
 
-		// push all excess out of i
-		if ( i->excess() > 0 ) {
-			discharge( i );
+                // push all excess out of i
+                if ( i->excess() > 0 ) {
+                        discharge( i );
 
-			if ( time_for_update() || _flag_price ) {
-				if ( i->excess() > 0 ) {
-					insert_to_excess_q( i );
-				}
+                        if ( time_for_update() || _flag_price ) {
+                                if ( i->excess() > 0 ) {
+                                        insert_to_excess_q( i );
+                                }
 
-				if ( _flag_price && ( _n_ref > PRICE_OUT_START ) ) {
-					pr_in_int = 0;
-					price_in();
-					_flag_price = 0;
-				}
+                                if ( _flag_price && ( _n_ref > PRICE_OUT_START ) ) {
+                                        pr_in_int = 0;
+                                        price_in();
+                                        _flag_price = 0;
+                                }
 
-				price_update();
+                                price_update();
 
-				while ( _flag_updt ) {
-					if ( _n_ref == 1 ) {
-						return -1;
-					} else {
-						_flag_updt = 0;
-						update_cut_off();
-						_n_bad_relabel ++;
-						pr_in_int = 0;
-						price_in();
-						price_update();
-					}
-				}
-				_n_rel = 0;
+                                while ( _flag_updt ) {
+                                        if ( _n_ref == 1 ) {
+                                                return -1;
+                                        } else {
+                                                _flag_updt = 0;
+                                                update_cut_off();
+                                                _n_bad_relabel ++;
+                                                pr_in_int = 0;
+                                                price_in();
+                                                price_update();
+                                        }
+                                }
+                                _n_rel = 0;
 
-				if ( _n_ref > PRICE_OUT_START && (pr_in_int ++ > _time_for_price_in) ) {
-					pr_in_int = 0;
-					price_in();
-				}
-			}
-		}
-	}
+                                if ( _n_ref > PRICE_OUT_START && (pr_in_int ++ > _time_for_price_in) ) {
+                                        pr_in_int = 0;
+                                        price_in();
+                                }
+                        }
+                }
+        }
 
-	return -2;
+        return -2;
 }
 
 int MCMF_YCW::price_refine() {
-	NODE *i; // current node
-	NODE *j; // opposite node
-	NODE *ir; // nodes for passing over the negative cycle
-	NODE *is;
-	ARC *a; // arc (i,j)
-	ARC *a_stop; // first arc from the next node
-	ARC *ar;
-	long bmax;            // number of farest nonempty bucket
-	long i_rank;          // rank of node i
-	long j_rank;         // rank of node j
-	long j_new_rank;      // new rank of node j
-	BUCKET *b;              // current bucket
-	BUCKET *b_old;          // old and new buckets of current node
-	BUCKET *b_new;
-	price_t rc = 0; // reduced cost of a
-	price_t dr; // ranks difference
-	price_t dp;
-	int cc;
-	// return code: 1 - flow is epsilon optimal
-	// 0 - refine is needed
-	long df; // cycle capacity
-	int nnc; // number of negative cycles cancelled during one iteration
-	int snc; // total number of negative cycle cancelled
+        NODE *i; // current node
+        NODE *j; // opposite node
+        NODE *ir; // nodes for passing over the negative cycle
+        NODE *is;
+        ARC *a; // arc (i,j)
+        ARC *a_stop; // first arc from the next node
+        ARC *ar;
+        long bmax;            // number of farest nonempty bucket
+        long i_rank;          // rank of node i
+        long j_rank;         // rank of node j
+        long j_new_rank;      // new rank of node j
+        BUCKET *b;              // current bucket
+        BUCKET *b_old;          // old and new buckets of current node
+        BUCKET *b_new;
+        priceType rc = 0; // reduced cost of a
+        priceType dr; // ranks difference
+        priceType dp;
+        int cc;
+        // return code: 1 - flow is epsilon optimal
+        // 0 - refine is needed
+        long df; // cycle capacity
+        int nnc; // number of negative cycles cancelled during one iteration
+        int snc; // total number of negative cycle cancelled
 
-	_n_prefine ++;
+        _n_prefine ++;
 
-	cc = 1;
-	snc = 0;
+        cc = 1;
+        snc = 0;
 
-	_snc_max = 0;
-
-
-	// (1) main loop
-	// while negative cycle is found or eps-optimal solution is constructed
-	while ( 1 ) {
-
-		nnc = 0;
-		for ( i = _nodes; i != _sentinel_node; i ++ ) {
-			i->set_rank( 0);
-			i->set_inp( 0);
-			i->set_current( i->first());
-		}
-		reset_stackq();
-
-		for ( i = _nodes; i != _sentinel_node; i ++ ) {
-			if ( i->inp() == 2 ) continue;
-
-			i->set_b_next( NULL);
-
-			// deapth first search
-			while ( 1 ) {
-				i->set_inp(1);
-
-				// scanning arcs from node i starting from current
-				for ( a = i->current(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
-					if ( (a->rez_capacity() > 0) ) {
-						j = a->head();
-						if ( i->price() + a->cost() - j->price() < 0 ) {
-							if ( j->inp() == 0 ) { // fresh node  - step forward
-								i->set_current( a);
-								j->set_b_next( i);
-								i = j;
-								a = j->current();
-								a_stop = (j+1)->suspended();
-								break;
-							}
-
-							if ( j->inp() == 1 ) { // cycle detected
-								cc = 0;
-								nnc ++;
-								i->set_current( a);
-								is = ir = i;
-								df = 0x7fffffff;
-
-								while ( 1 ) {
-									ar = ir->current();
-									if ( ar->rez_capacity() <= df ) {
-										df = ar->rez_capacity();
-										is = ir;
-									}
-									if ( ir == j ) break;
-									ir = ir->b_next();
-								}
-
-								ir = i;
-
-								while ( 1 ) {
-									ar = ir->current();
-									increase_flow( ir, ar->head(), ar, df);
-									if ( ir == j ) break;
-									ir = ir->b_next();
-								}
-
-								if ( is != i ) {
-									for ( ir = i; ir != is; ir = ir->b_next() ) {
-										ir->set_inp( 0);
-									}
-									i = is;
-									a = is->current() + 1;
-									a_stop = (is+1)->suspended();
-									break;
-								}
-							}
-						}
-						// if j-color is BLACK - continue search from i
-					}
-				} // all arcs from i are scanned
-
-				if ( a == a_stop ) {
-					// step back
-					i->set_inp( 2);
-					_n_prscan1 ++;
-					j = i->b_next();
-					stackq_push( i );
-					if ( j == NULL ) break;
-					i = j;
-					i->inc_current();
-				}
-
-			} // end of deapth first search
-		} // all nodes are scanned
+        _snc_max = 0;
 
 
-		// () no negative cycle
-		// computing longest paths with eps-precision
+        // (1) main loop
+        // while negative cycle is found or eps-optimal solution is constructed
+        while ( 1 ) {
 
-		snc += nnc;
-		if ( snc < _snc_max ) cc = 1;
-		if ( cc == 0 ) break;
-		bmax = 0;
+                nnc = 0;
+                for ( i = _nodes; i != _sentinel_node; i ++ ) {
+                        i->set_rank( 0);
+                        i->set_inp( 0);
+                        i->set_current( i->first());
+                }
+                reset_stackq();
 
-		while ( nonempty_stackq() ) {
+                for ( i = _nodes; i != _sentinel_node; i ++ ) {
+                        if ( i->inp() == 2 ) continue;
 
-			_n_prscan2 ++;
-			// STACKQ_POP( i );
-			i = _excq_first;				
-			_excq_first = i -> q_next();			
-			i ->set_q_next( _sentinel_node );
-			i_rank = i->rank();
-			for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+                        i->set_b_next( NULL);
 
-				if (a->rez_capacity() > 0) {
-					j  = a->head();
-					rc = i->price() + a->cost() - j->price();
+                        // deapth first search
+                        while ( 1 ) {
+                                i->set_inp(1);
 
-					if ( rc < 0 ) { // admissible arc;
-						dr = (price_t) (( - rc - 0.5 ) / _epsilon);
-						if (( j_rank = dr + i_rank ) < _linf ) {
-							if ( j_rank > j->rank() )
-								j->set_rank( j_rank);
-						}
-					}
-				}
-			} // all arcs from i are scanned
+                                // scanning arcs from node i starting from current
+                                for ( a = i->current(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+                                        if ( (a->rez_capacity() > 0) ) {
+                                                j = a->head();
+                                                if ( i->price() + a->cost() - j->price() < 0 ) {
+                                                        if ( j->inp() == 0 ) { // fresh node  - step forward
+                                                                i->set_current( a);
+                                                                j->set_b_next( i);
+                                                                i = j;
+                                                                a = j->current();
+                                                                a_stop = (j+1)->suspended();
+                                                                break;
+                                                        }
 
-			if ( i_rank > 0 ) {
-				if ( i_rank > bmax ) bmax = i_rank;
-				b = _buckets + i_rank;
-				insert_to_bucket( i, b );
-			}
-		} // end of while-cycle: all nodes are scanned - longest distancess are computed;
+                                                        if ( j->inp() == 1 ) { // cycle detected
+                                                                cc = 0;
+                                                                nnc ++;
+                                                                i->set_current( a);
+                                                                is = ir = i;
+                                                                df = 0x7fffffff;
 
+                                                                while ( 1 ) {
+                                                                        ar = ir->current();
+                                                                        if ( ar->rez_capacity() <= df ) {
+                                                                                df = ar->rez_capacity();
+                                                                                is = ir;
+                                                                        }
+                                                                        if ( ir == j ) break;
+                                                                        ir = ir->b_next();
+                                                                }
 
-		if ( bmax == 0 ) { // preflow is eps-optimal;
-			break;
-		}
+                                                                ir = i;
 
+                                                                while ( 1 ) {
+                                                                        ar = ir->current();
+                                                                        increase_flow( ir, ar->head(), ar, df);
+                                                                        if ( ir == j ) break;
+                                                                        ir = ir->b_next();
+                                                                }
 
-		for ( b = _buckets + bmax; b != _buckets; b -- ) {
-			i_rank = b - _buckets;
-			dp = i_rank * _epsilon;
+                                                                if ( is != i ) {
+                                                                        for ( ir = i; ir != is; ir = ir->b_next() ) {
+                                                                                ir->set_inp( 0);
+                                                                        }
+                                                                        i = is;
+                                                                        a = is->current() + 1;
+                                                                        a_stop = (is+1)->suspended();
+                                                                        break;
+                                                                }
+                                                        }
+                                                }
+                                                // if j-color is BLACK - continue search from i
+                                        }
+                                } // all arcs from i are scanned
 
-			while ( nonempty_bucket( b) ) {
-				// GET_FROM_BUCKET( i, b );
-				i=(b -> p_first() );
-				b ->set_p_first( i -> b_next() );
-				_n_prscan ++;
+                                if ( a == a_stop ) {
+                                        // step back
+                                        i->set_inp( 2);
+                                        _n_prscan1 ++;
+                                        j = i->b_next();
+                                        stackq_push( i );
+                                        if ( j == NULL ) break;
+                                        i = j;
+                                        i->inc_current();
+                                }
 
-				for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
-					if (a->rez_capacity() > 0) {
-						j = a->head();
-						j_rank = j->rank();
-						if ( j_rank < i_rank ) {
-							rc = i->price() + a->cost() - j->price();
-							if ( rc < 0 ) {
-								j_new_rank = i_rank;
-							} else {
-								dr = rc / _epsilon;
-								j_new_rank = ( dr < _linf ) ? i_rank - ( (long)dr + 1 ) : 0;
-							}
-							if ( j_rank < j_new_rank ) {
-								if ( cc == 1 ) {
-									j->set_rank( j_new_rank);
-									if ( j_rank > 0 ) {
-										b_old = _buckets + j_rank;
-										// REMOVE_FROM_BUCKET( j, b_old );
-										if ( j == ( b_old -> p_first() ) )							
-											b_old ->set_p_first( j -> b_next() );					
-										else													
-										{													
-											( j -> b_prev() )->set_b_next( j -> b_next() );	
-											( j -> b_next() )->set_b_prev( j -> b_prev() );	
-										}
-									}
-									b_new = _buckets + j_new_rank;
-									insert_to_bucket( j, b_new );
-								} else {
-									df = a->rez_capacity();
-									increase_flow( i, j, a, df );
-								}
-							}
-						}
-					} // end if opened arc
-				} // all arcs are scanned
-
-				i->dec_price( dp);
-
-			} // end of while-cycle: the bucket is scanned
-		} // end of for-cycle: all buckets are scanned
-
-		if ( cc == 0 ) break;
-
-	} // end of main loop
+                        } // end of deapth first search
+                } // all nodes are scanned
 
 
+                // () no negative cycle
+                // computing longest paths with eps-precision
 
-	// (2) finish
-	// if refine needed - saturate non-epsilon-optimal arcs;
+                snc += nnc;
+                if ( snc < _snc_max ) cc = 1;
+                if ( cc == 0 ) break;
+                bmax = 0;
 
-	if ( cc == 0 ) {
-		for ( i = _nodes; i != _sentinel_node; i ++) {
-			for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
-				if ( i->price() + a->cost() - a->head()->price() < - _epsilon ) {
-					if ( ( df = a->rez_capacity() ) > 0 ) {
-						increase_flow( i, a->head(), a, df );
-					}
-				}
-			}
-		}
-	}
+                while ( nonempty_stackq() ) {
 
-	return ( cc );
+                        _n_prscan2 ++;
+                        // STACKQ_POP( i );
+                        i = _excq_first;
+                        _excq_first = i -> q_next();
+                        i ->set_q_next( _sentinel_node );
+                        i_rank = i->rank();
+                        for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+
+                                if (a->rez_capacity() > 0) {
+                                        j  = a->head();
+                                        rc = i->price() + a->cost() - j->price();
+
+                                        if ( rc < 0 ) { // admissible arc;
+                                                dr = (priceType) (( - rc - 0.5 ) / _epsilon);
+                                                if (( j_rank = dr + i_rank ) < _linf ) {
+                                                        if ( j_rank > j->rank() )
+                                                                j->set_rank( j_rank);
+                                                }
+                                        }
+                                }
+                        } // all arcs from i are scanned
+
+                        if ( i_rank > 0 ) {
+                                if ( i_rank > bmax ) bmax = i_rank;
+                                b = _buckets + i_rank;
+                                insert_to_bucket( i, b );
+                        }
+                } // end of while-cycle: all nodes are scanned - longest distancess are computed;
+
+
+                if ( bmax == 0 ) { // preflow is eps-optimal;
+                        break;
+                }
+
+
+                for ( b = _buckets + bmax; b != _buckets; b -- ) {
+                        i_rank = b - _buckets;
+                        dp = i_rank * _epsilon;
+
+                        while ( nonempty_bucket( b) ) {
+                                // GET_FROM_BUCKET( i, b );
+                                i=(b -> p_first() );
+                                b ->set_p_first( i -> b_next() );
+                                _n_prscan ++;
+
+                                for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+                                        if (a->rez_capacity() > 0) {
+                                                j = a->head();
+                                                j_rank = j->rank();
+                                                if ( j_rank < i_rank ) {
+                                                        rc = i->price() + a->cost() - j->price();
+                                                        if ( rc < 0 ) {
+                                                                j_new_rank = i_rank;
+                                                        } else {
+                                                                dr = rc / _epsilon;
+                                                                j_new_rank = ( dr < _linf ) ? i_rank - ( (long)dr + 1 ) : 0;
+                                                        }
+                                                        if ( j_rank < j_new_rank ) {
+                                                                if ( cc == 1 ) {
+                                                                        j->set_rank( j_new_rank);
+                                                                        if ( j_rank > 0 ) {
+                                                                                b_old = _buckets + j_rank;
+                                                                                // REMOVE_FROM_BUCKET( j, b_old );
+                                                                                if ( j == ( b_old -> p_first() ) )
+                                                                                        b_old ->set_p_first( j -> b_next() );
+                                                                                else
+                                                                                {
+                                                                                        ( j -> b_prev() )->set_b_next( j -> b_next() );
+                                                                                        ( j -> b_next() )->set_b_prev( j -> b_prev() );
+                                                                                }
+                                                                        }
+                                                                        b_new = _buckets + j_new_rank;
+                                                                        insert_to_bucket( j, b_new );
+                                                                } else {
+                                                                        df = a->rez_capacity();
+                                                                        increase_flow( i, j, a, df );
+                                                                }
+                                                        }
+                                                }
+                                        } // end if opened arc
+                                } // all arcs are scanned
+
+                                i->dec_price( dp);
+
+                        } // end of while-cycle: the bucket is scanned
+                } // end of for-cycle: all buckets are scanned
+
+                if ( cc == 0 ) break;
+
+        } // end of main loop
+
+
+
+        // (2) finish
+        // if refine needed - saturate non-epsilon-optimal arcs;
+
+        if ( cc == 0 ) {
+                for ( i = _nodes; i != _sentinel_node; i ++) {
+                        for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+                                if ( i->price() + a->cost() - a->head()->price() < - _epsilon ) {
+                                        if ( ( df = a->rez_capacity() ) > 0 ) {
+                                                increase_flow( i, a->head(), a, df );
+                                        }
+                                }
+                        }
+                }
+        }
+
+        return ( cc );
 }
 
 void MCMF_YCW::compute_prices() {
-	NODE *i; // current node
-	NODE *j; // opposite node
-	ARC *a; // arc (i,j)
-	ARC *a_stop; // first arc from the next node
-	long bmax; // number of farest nonempty bucket
-	long i_rank; // rank of node i
-	long j_rank; // rank of node j
-	long j_new_rank; // new rank of node j
-	BUCKET *b; // current bucket
-	BUCKET *b_old; // old and new buckets of current node
-	BUCKET *b_new;
-	price_t rc; // reduced cost of a
-	price_t dr; // ranks difference
-	price_t dp;
-	int cc; // return code: 1 - flow is epsilon optimal 0 - refine is needed
+        NODE *i; // current node
+        NODE *j; // opposite node
+        ARC *a; // arc (i,j)
+        ARC *a_stop; // first arc from the next node
+        long bmax; // number of farest nonempty bucket
+        long i_rank; // rank of node i
+        long j_rank; // rank of node j
+        long j_new_rank; // new rank of node j
+        BUCKET *b; // current bucket
+        BUCKET *b_old; // old and new buckets of current node
+        BUCKET *b_new;
+        priceType rc; // reduced cost of a
+        priceType dr; // ranks difference
+        priceType dp;
+        int cc; // return code: 1 - flow is epsilon optimal 0 - refine is needed
 
-	_n_prefine ++;
-	cc = 1;
+        _n_prefine ++;
+        cc = 1;
 
-	// (1) main loop
-	// while negative cycle is found or eps-optimal solution is constructed
-	while ( 1 ) {
+        // (1) main loop
+        // while negative cycle is found or eps-optimal solution is constructed
+        while ( 1 ) {
 
-		for ( i = _nodes; i != _sentinel_node; i ++) {
-			i->set_rank( 0);
-			i->set_inp( 0);
-			i->set_current( i->first());
-		}
-		reset_stackq();
+                for ( i = _nodes; i != _sentinel_node; i ++) {
+                        i->set_rank( 0);
+                        i->set_inp( 0);
+                        i->set_current( i->first());
+                }
+                reset_stackq();
 
-		for ( i = _nodes; i != _sentinel_node; i ++ ) {
-			if ( i->inp() == 2 ) continue;
+                for ( i = _nodes; i != _sentinel_node; i ++ ) {
+                        if ( i->inp() == 2 ) continue;
 
-			i->set_b_next( NULL);
-			// depth first search
-			while ( 1 ) {
-				i->set_inp( 1);
+                        i->set_b_next( NULL);
+                        // depth first search
+                        while ( 1 ) {
+                                i->set_inp( 1);
 
-				// scanning arcs from node i
-				for ( a = i->suspended(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
-					if (a->rez_capacity() > 0) {
-						j = a->head();
-						if ( i->price() + a->cost() - j->price() < 0 ) {
-							if ( j->inp() == 0 ) { // fresh node  - step forward
-								i->set_current( a);
-								j->set_b_next( i);
-								i = j;
-								a = j->current();
-								a_stop = (j+1)->suspended();
-								break;
-							}
+                                // scanning arcs from node i
+                                for ( a = i->suspended(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+                                        if (a->rez_capacity() > 0) {
+                                                j = a->head();
+                                                if ( i->price() + a->cost() - j->price() < 0 ) {
+                                                        if ( j->inp() == 0 ) { // fresh node  - step forward
+                                                                i->set_current( a);
+                                                                j->set_b_next( i);
+                                                                i = j;
+                                                                a = j->current();
+                                                                a_stop = (j+1)->suspended();
+                                                                break;
+                                                        }
 
-							if ( j->inp() == 1 ) { // cycle detected; should not happen
-								cc = 0;
-							}
-						}
-						// if j-color is BLACK - continue search from i
-					}
-				} // all arcs from i are scanned
+                                                        if ( j->inp() == 1 ) { // cycle detected; should not happen
+                                                                cc = 0;
+                                                        }
+                                                }
+                                                // if j-color is BLACK - continue search from i
+                                        }
+                                } // all arcs from i are scanned
 
-				if ( a == a_stop ) {
-					// step back
-					i->set_inp( 2);
-					_n_prscan1 ++;
-					j = i->b_next();
-					stackq_push( i );
-					if ( j == NULL ) break;
-					i = j;
-					i->inc_current();
-				}
+                                if ( a == a_stop ) {
+                                        // step back
+                                        i->set_inp( 2);
+                                        _n_prscan1 ++;
+                                        j = i->b_next();
+                                        stackq_push( i );
+                                        if ( j == NULL ) break;
+                                        i = j;
+                                        i->inc_current();
+                                }
 
-			} // end of deapth first search
-		} // all nodes are scanned
-
-
-		// no negative cycle
-		// computing longest paths
-
-		if ( cc == 0 ) break;
-		bmax = 0;
-
-		while ( nonempty_stackq() ) {
-			_n_prscan2 ++;
-			i = _excq_first;				
-			_excq_first = i -> q_next();			
-			i ->set_q_next( _sentinel_node );
-			i_rank = i->rank();
-			for ( a = i->suspended(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
-				if (a->rez_capacity() > 0) {
-					j  = a->head();
-					rc = i->price() + a->cost() - j->price();
+                        } // end of deapth first search
+                } // all nodes are scanned
 
 
-					if ( rc < 0 ) {// admissible arc
-						dr = - rc;
-						if (( j_rank = dr + i_rank ) < _linf ) {
-							if ( j_rank > j->rank() )
-								j->set_rank( j_rank);
-						}
-					}
-				}
-			} // all arcs from i are scanned
+                // no negative cycle
+                // computing longest paths
 
-			if ( i_rank > 0 ) {
-				if ( i_rank > bmax ) bmax = i_rank;
-				b = _buckets + i_rank;
-				insert_to_bucket( i, b );
-			}
-		} // end of while-cycle: all nodes are scanned - longest distancess are computed;
+                if ( cc == 0 ) break;
+                bmax = 0;
 
-		if ( bmax == 0 ) {
-			break;
-		}
+                while ( nonempty_stackq() ) {
+                        _n_prscan2 ++;
+                        i = _excq_first;
+                        _excq_first = i -> q_next();
+                        i ->set_q_next( _sentinel_node );
+                        i_rank = i->rank();
+                        for ( a = i->suspended(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+                                if (a->rez_capacity() > 0) {
+                                        j  = a->head();
+                                        rc = i->price() + a->cost() - j->price();
 
-		for ( b = _buckets + bmax; b != _buckets; b -- ) {
-			i_rank = b - _buckets;
-			dp = i_rank;
 
-			while ( nonempty_bucket( b) ) {
-				i=(b -> p_first() );
-				b ->set_p_first( i -> b_next() );
-				_n_prscan ++;
+                                        if ( rc < 0 ) {// admissible arc
+                                                dr = - rc;
+                                                if (( j_rank = dr + i_rank ) < _linf ) {
+                                                        if ( j_rank > j->rank() )
+                                                                j->set_rank( j_rank);
+                                                }
+                                        }
+                                }
+                        } // all arcs from i are scanned
 
-				for ( a = i->suspended(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
-					if (a->rez_capacity() > 0) {
-						j = a->head();
-						j_rank = j->rank();
-						if ( j_rank < i_rank ) {
-							rc = i->price() + a->cost() - j->price();
+                        if ( i_rank > 0 ) {
+                                if ( i_rank > bmax ) bmax = i_rank;
+                                b = _buckets + i_rank;
+                                insert_to_bucket( i, b );
+                        }
+                } // end of while-cycle: all nodes are scanned - longest distancess are computed;
 
-							if ( rc < 0 ) {
-								j_new_rank = i_rank;
-							} else {
-								dr = rc;
-								j_new_rank = ( dr < _linf ) ? i_rank - ( (long)dr + 1 ) : 0;
-							}
-							if ( j_rank < j_new_rank ) {
-								if ( cc == 1 ) {
-									j->set_rank( j_new_rank);
-									if ( j_rank > 0 ) {
-										b_old = _buckets + j_rank;
-										if ( j == ( b_old -> p_first() ) )							
-											b_old ->set_p_first( j -> b_next() );					
-										else													
-										{													
-											( j -> b_prev() )->set_b_next( j -> b_next() );	
-											( j -> b_next() )->set_b_prev( j -> b_prev() );	
-										}
-									}
-									b_new = _buckets + j_new_rank;
-									insert_to_bucket( j, b_new );
-								}
-							}
-						}
-					} // end if opened arc
-				} // all arcs are scanned
+                if ( bmax == 0 ) {
+                        break;
+                }
 
-				i->dec_price( dp);
+                for ( b = _buckets + bmax; b != _buckets; b -- ) {
+                        i_rank = b - _buckets;
+                        dp = i_rank;
 
-			} // end of while-cycle: the bucket is scanned
-		} // end of for-cycle: all buckets are scanned
+                        while ( nonempty_bucket( b) ) {
+                                i=(b -> p_first() );
+                                b ->set_p_first( i -> b_next() );
+                                _n_prscan ++;
 
-		if ( cc == 0 ) break;
+                                for ( a = i->suspended(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+                                        if (a->rez_capacity() > 0) {
+                                                j = a->head();
+                                                j_rank = j->rank();
+                                                if ( j_rank < i_rank ) {
+                                                        rc = i->price() + a->cost() - j->price();
 
-	} // end of main loop
+                                                        if ( rc < 0 ) {
+                                                                j_new_rank = i_rank;
+                                                        } else {
+                                                                dr = rc;
+                                                                j_new_rank = ( dr < _linf ) ? i_rank - ( (long)dr + 1 ) : 0;
+                                                        }
+                                                        if ( j_rank < j_new_rank ) {
+                                                                if ( cc == 1 ) {
+                                                                        j->set_rank( j_new_rank);
+                                                                        if ( j_rank > 0 ) {
+                                                                                b_old = _buckets + j_rank;
+                                                                                if ( j == ( b_old -> p_first() ) )
+                                                                                        b_old ->set_p_first( j -> b_next() );
+                                                                                else
+                                                                                {
+                                                                                        ( j -> b_prev() )->set_b_next( j -> b_next() );
+                                                                                        ( j -> b_next() )->set_b_prev( j -> b_prev() );
+                                                                                }
+                                                                        }
+                                                                        b_new = _buckets + j_new_rank;
+                                                                        insert_to_bucket( j, b_new );
+                                                                }
+                                                        }
+                                                }
+                                        } // end if opened arc
+                                } // all arcs are scanned
+
+                                i->dec_price( dp);
+
+                        } // end of while-cycle: the bucket is scanned
+                } // end of for-cycle: all buckets are scanned
+
+                if ( cc == 0 ) break;
+
+        } // end of main loop
 }
 
 void MCMF_YCW::price_out() {
-	NODE *i; // current node
-	ARC *a; // current arc from i
-	ARC *a_stop; // first arc from the next node
-	ARC *b; // arc to be exchanged with suspended
-	double n_cut_off; // -cut_off
-	double rc; // reduced cost
+        NODE *i; // current node
+        ARC *a; // current arc from i
+        ARC *a_stop; // first arc from the next node
+        ARC *b; // arc to be exchanged with suspended
+        double n_cut_off; // -cut_off
+        double rc; // reduced cost
 
-	n_cut_off = - _cut_off;
+        n_cut_off = - _cut_off;
 
-	for ( i = _nodes; i != _sentinel_node; i ++) {
-		for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+        for ( i = _nodes; i != _sentinel_node; i ++) {
+                for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
 
-			rc = i->price() + a->cost() - a->head()->price();
-			if ( ( rc > _cut_off && a->sister()->rez_capacity() <= 0 ) ||
-			        ( rc < n_cut_off && a->rez_capacity() <= 0 ) ) { // suspend the arc
+                        rc = i->price() + a->cost() - a->head()->price();
+                        if ( ( rc > _cut_off && a->sister()->rez_capacity() <= 0 ) ||
+                                ( rc < n_cut_off && a->rez_capacity() <= 0 ) ) { // suspend the arc
 
-				b = i->first();
-				i->inc_first();
-				exchange( a, b );
-			}
-		}
-	}
+                                b = i->first();
+                                i->inc_first();
+                                exchange( a, b );
+                        }
+                }
+        }
 }
 
 int MCMF_YCW::update_epsilon() {
-	// decrease epsilon after epsilon-optimal flow is constructed;
-	if ( _epsilon <= 1 ) return ( 1 );
+        // decrease epsilon after epsilon-optimal flow is constructed;
+        if ( _epsilon <= 1 ) return ( 1 );
 
-	_epsilon = (price_t) (ceil ( (double) _epsilon / _f_scale ));
-	_cut_off = _cut_off_factor * _epsilon;
-	_cut_on = _cut_off * CUT_OFF_GAP;
+        _epsilon = (priceType) (ceil ( (double) _epsilon / _f_scale ));
+        _cut_off = _cut_off_factor * _epsilon;
+        _cut_on = _cut_off * CUT_OFF_GAP;
 
-	return ( 0 );
+        return ( 0 );
 }
 
 
 
 
 int MCMF_YCW::check_eps_opt() {
-	NODE *i;
-	ARC *a, *a_stop;
+        NODE *i;
+        ARC *a, *a_stop;
 
-	for ( i = _nodes; i != _sentinel_node; i ++) {
-		for ( a = i->suspended(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+        for ( i = _nodes; i != _sentinel_node; i ++) {
+                for ( a = i->suspended(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
 
-			if ( (a->rez_capacity() > 0) && ((i->price() + a->cost() - a->head()->price()) < - _epsilon) ) {
-				return ( 0);
-			}
-		}
-	}
-	return(1);
+                        if ( (a->rez_capacity() > 0) && ((i->price() + a->cost() - a->head()->price()) < - _epsilon) ) {
+                                return ( 0);
+                        }
+                }
+        }
+        return(1);
 }
 
 void MCMF_YCW::init_solution() {
-	ARC *a; // current arc (i,j)
-	NODE *i; // tail of a
-	NODE *j; // head of a
-	long df; // residual capacity
+        ARC *a; // current arc (i,j)
+        NODE *i; // tail of a
+        NODE *j; // head of a
+        long df; // residual capacity
 
-	for ( a = _arcs; a != _sentinel_arc; a ++ ) {
-		if ( a->rez_capacity() > 0 && a->cost() < 0 ) {
-			df = a->rez_capacity();
-			i  = a->sister()->head();
-			j  = a->head();
-			increase_flow( i, j, a, df );
-		}
-	}
+        for ( a = _arcs; a != _sentinel_arc; a ++ ) {
+                if ( a->rez_capacity() > 0 && a->cost() < 0 ) {
+                        df = a->rez_capacity();
+                        i  = a->sister()->head();
+                        j  = a->head();
+                        increase_flow( i, j, a, df );
+                }
+        }
 }
 
 void MCMF_YCW::cs_cost_reinit() {
-	if ( _cost_restart == false)
-		return;
+        if ( _cost_restart == false)
+                return;
 
-	NODE *i; // current node
-	ARC *a;          // current arc
-	ARC *a_stop;
-	BUCKET *b; // current bucket
-	price_t rc, minc, sum;
+        NODE *i; // current node
+        ARC *a;          // current arc
+        ARC *a_stop;
+        BUCKET *b; // current bucket
+        priceType rc, minc, sum;
 
 
-	for ( b = _buckets; b != _l_bucket; b ++) {
-		reset_bucket( b);
-	}
+        for ( b = _buckets; b != _l_bucket; b ++) {
+                reset_bucket( b);
+        }
 
-	rc = 0;
-	for ( i = _nodes; i != _sentinel_node; i ++) {
-		rc = rc < i->price()?rc:i->price();
-		i->set_first( i->suspended());
-		i->set_current( i->first());
-		i->set_q_next( _sentinel_node);
-	}
+        rc = 0;
+        for ( i = _nodes; i != _sentinel_node; i ++) {
+                rc = rc < i->price()?rc:i->price();
+                i->set_first( i->suspended());
+                i->set_current( i->first());
+                i->set_q_next( _sentinel_node);
+        }
 
-	// make prices nonnegative and multiply
-	for ( i = _nodes; i != _sentinel_node; i ++) {
-		i->set_price( (i->price() - rc) * _dn);
-	}
+        // make prices nonnegative and multiply
+        for ( i = _nodes; i != _sentinel_node; i ++) {
+                i->set_price( (i->price() - rc) * _dn);
+        }
 
-	// multiply arc costs
-	for (a = _arcs; a != _sentinel_arc; a ++) {
-		a->multiply_cost( _dn);
-	}
+        // multiply arc costs
+        for (a = _arcs; a != _sentinel_arc; a ++) {
+                a->multiply_cost( _dn);
+        }
 
-	sum = 0;
-	for ( i = _nodes; i != _sentinel_node; i ++) {
-		minc = 0;
-		for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
-			if ( ((a->rez_capacity() > 0) && ((rc = i->price() + a->cost() - a->head()->price()) < 0)) )
-				minc =  _epsilon > -rc?_epsilon:-rc;
-		}
-		sum += minc;
-	}
+        sum = 0;
+        for ( i = _nodes; i != _sentinel_node; i ++) {
+                minc = 0;
+                for ( a = i->first(), a_stop = (i + 1)->suspended(); a != a_stop; a ++) {
+                        if ( ((a->rez_capacity() > 0) && ((rc = i->price() + a->cost() - a->head()->price()) < 0)) )
+                                minc =  _epsilon > -rc?_epsilon:-rc;
+                }
+                sum += minc;
+        }
 
-	_epsilon = ceil(sum / _dn);
+        _epsilon = ceil(sum / _dn);
 
-	_cut_off_factor = CUT_OFF_COEF * pow((double)_n, CUT_OFF_POWER);
+        _cut_off_factor = CUT_OFF_COEF * pow((double)_n, CUT_OFF_POWER);
 
-	_cut_off_factor =  _cut_off_factor > CUT_OFF_MIN ? _cut_off_factor:CUT_OFF_MIN;
+        _cut_off_factor =  _cut_off_factor > CUT_OFF_MIN ? _cut_off_factor:CUT_OFF_MIN;
 
-	_n_ref = 0;
+        _n_ref = 0;
 
-	_n_refine = _n_discharge = _n_push = _n_relabel = 0;
-	_n_update = _n_scan = _n_prefine = _n_prscan = _n_prscan1 =
-	                                       _n_bad_pricein = _n_bad_relabel = 0;
+        _n_refine = _n_discharge = _n_push = _n_relabel = 0;
+        _n_update = _n_scan = _n_prefine = _n_prscan = _n_prscan1 =
+                                               _n_bad_pricein = _n_bad_relabel = 0;
 
-	_flag_price = 0;
+        _flag_price = 0;
 
-	_excq_first = NULL;
+        _excq_first = NULL;
 }
 
 void MCMF_YCW::cs2_cost_restart( double *objective_cost) {
-	// restart after a cost update;
-	if ( _cost_restart == false)
-		return;
+        // restart after a cost update;
+        if ( _cost_restart == false)
+                return;
 
-	int cc; // for storing return code;
+        int cc; // for storing return code;
 
-	cs_cost_reinit();
+        cs_cost_reinit();
 
-	cc = update_epsilon();
+        cc = update_epsilon();
 
-	if (cc == 0) {
-		do { // scaling loop
-			while ( 1 ) {
-				if ( ! price_refine() )
-					break;
+        if (cc == 0) {
+                do { // scaling loop
+                        while ( 1 ) {
+                                if ( ! price_refine() )
+                                        break;
 
-				if ( _n_ref >= PRICE_OUT_START ) {
-					if ( price_in() )
-						break;
-				}
-				if ((cc = update_epsilon ()))
-					break;
-			}
-			if (cc) break;
-			refine();
-			if ( _n_ref >= PRICE_OUT_START ) {
-				price_out();
-			}
-			if ( update_epsilon() )
-				break;
-		} while ( cc == 0 );
-	}
+                                if ( _n_ref >= PRICE_OUT_START ) {
+                                        if ( price_in() )
+                                                break;
+                                }
+                                if ((cc = update_epsilon ()))
+                                        break;
+                        }
+                        if (cc) break;
+                        refine();
+                        if ( _n_ref >= PRICE_OUT_START ) {
+                                price_out();
+                        }
+                        if ( update_epsilon() )
+                                break;
+                } while ( cc == 0 );
+        }
 
-	finishup( objective_cost );
+        finishup( objective_cost );
 }
 
 
 void MCMF_YCW::finishup( double *objective_cost) {
-	ARC *a; // current arc
-	long na; // corresponding position in capacity array
-	double obj_internal = 0; // objective
-	price_t cs; // actual arc cost
-	long flow; // flow through an arc
-	NODE *i;
+        ARC *a; // current arc
+        long na; // corresponding position in capacity array
+        double obj_internal = 0; // objective
+        priceType cs; // actual arc cost
+        long flow; // flow through an arc
+        NODE *i;
 
-	// (1) NO_ZERO_CYCLES?
-	if ( _no_zero_cycles == true) {
-		for ( a = _arcs; a != _sentinel_arc; a ++ ) {
-			if ( a->cost() == 1) {
-				assert( a->sister()->cost() == -1);
-				a->set_cost( 0);
-				a->sister()->set_cost( 0);
-			}
-		}
-	}
+        // (1) NO_ZERO_CYCLES?
+        if ( _no_zero_cycles == true) {
+                for ( a = _arcs; a != _sentinel_arc; a ++ ) {
+                        if ( a->cost() == 1) {
+                                assert( a->sister()->cost() == -1);
+                                a->set_cost( 0);
+                                a->sister()->set_cost( 0);
+                        }
+                }
+        }
 
-	// (2)
-	for ( a = _arcs, na = 0; a != _sentinel_arc ; a ++, na ++ ) {
-		cs = a->cost() / _dn;
-		if ( _cap[na]  > 0 && (flow = _cap[na] - a->rez_capacity()) != 0 )
-			obj_internal += (double) cs * (double) flow;
-		a->set_cost( cs);
-	}
+        // (2)
+        for ( a = _arcs, na = 0; a != _sentinel_arc ; a ++, na ++ ) {
+                cs = a->cost() / _dn;
+                if ( _cap[na]  > 0 && (flow = _cap[na] - a->rez_capacity()) != 0 )
+                        obj_internal += (double) cs * (double) flow;
+                a->set_cost( cs);
+        }
 
-	for ( i = _nodes; i != _sentinel_node; i ++) {
-		i->set_price( (i->price() / _dn));
-	}
+        for ( i = _nodes; i != _sentinel_node; i ++) {
+                i->set_price( (i->price() / _dn));
+        }
 
-	// (3) COMP_DUALS?
-	if ( _comp_duals == true) {
-		compute_prices();
-	}
+        // (3) COMP_DUALS?
+        if ( _comp_duals == true) {
+                compute_prices();
+        }
 
-	*objective_cost = obj_internal;
+        *objective_cost = obj_internal;
 }
 
 void MCMF_YCW::cs2( double *objective_cost) {
-	// the main calling function;
-	int cc = 0; // for storing return code;
+        // the main calling function;
+        int cc = 0; // for storing return code;
 
 
-	// (1) update epsilon first;
-	update_epsilon();
+        // (1) update epsilon first;
+        update_epsilon();
 
 
-	// (2) scaling loop;
-	do {
+        // (2) scaling loop;
+        do {
 //		refine();
 
-		int ref = refine();
-		if(ref==-1) {
-			*objective_cost = -1;
-			return ;
-		}
+                int ref = refine();
+                if(ref==-1) {
+                        *objective_cost = -1;
+                        return ;
+                }
 
-		if ( _n_ref >= PRICE_OUT_START )
-			price_out();
+                if ( _n_ref >= PRICE_OUT_START )
+                        price_out();
 
-		if ( update_epsilon() )
-			break;
+                if ( update_epsilon() )
+                        break;
 
-		while (1) {
-			if ( ! price_refine() )
-				break;
+                while (1) {
+                        if ( ! price_refine() )
+                                break;
 
-			if ( _n_ref >= PRICE_OUT_START ) {
-				if ( price_in() ) break;
-				if ( (cc = update_epsilon()) ) break;
-			}
-		}
-	} while ( cc == 0 );
+                        if ( _n_ref >= PRICE_OUT_START ) {
+                                if ( price_in() ) break;
+                                if ( (cc = update_epsilon()) ) break;
+                        }
+                }
+        } while ( cc == 0 );
 
 
-	// (3) finishup;
-	finishup( objective_cost );
+        // (3) finishup;
+        finishup( objective_cost );
 }
 
 
 int MCMF_YCW::greenTea() {
 
 
-	double objective_cost;
+        double objective_cost;
 
 
-	// (4) ordering, etc.;
+        // (4) ordering, etc.;
 
-	pre_processing();
+        pre_processing();
 
-	// () CHECK_SOLUTION?
-	if ( _check_solution == true) {
-		_node_balance = (long long int *) calloc (_n+1, sizeof(long long int));
-		for ( NODE *i = _nodes; i < _nodes + _n; i ++ ) {
-			_node_balance[i - _nodes] = i->excess();
-		}
-	}
-
-
-	// (5) initializations;
-	_m = 2 * _m;
-	cs2_initialize(); // works already with 2*m;
-
-	// (6) run CS2;
-	cs2( &objective_cost );
+        // () CHECK_SOLUTION?
+        if ( _check_solution == true) {
+                _node_balance = (long long int *) calloc (_n+1, sizeof(long long int));
+                for ( NODE *i = _nodes; i < _nodes + _n; i ++ ) {
+                        _node_balance[i - _nodes] = i->excess();
+                }
+        }
 
 
-	if(objective_cost<0){
-		if(!isOutputResult){
-			deallocate_arrays();
-		}
-		
-		
-		return -1;
-	}else{
-		// cout<<"加总费用之前："<<objective_cost<<endl;
-		addServerAndDeployPrice(&objective_cost);
-		
-		if(!isOutputResult){
-			// () cleanup;
-			deallocate_arrays();
-		}
-		return objective_cost;
-	}
-	
+        // (5) initializations;
+        _m = 2 * _m;
+        cs2_initialize(); // works already with 2*m;
+
+        // (6) run CS2;
+        cs2( &objective_cost );
+
+
+        if(objective_cost<0){
+                if(!isOutputResult){
+                        deallocate_arrays();
+                }
+
+
+                return -1;
+        }else{
+                // cout<<"加总费用之前："<<objective_cost<<endl;
+                addServerAndDeployPrice(&objective_cost);
+
+                if(!isOutputResult){
+                        // () cleanup;
+                        deallocate_arrays();
+                }
+                return objective_cost;
+        }
+
 
 }
 
 //通过服务器输出流量确定相应的档次价格
 pair<int,int> MCMF_YCW::determineDC(int serverOutput){
     map<int, pair<int,int> >::iterator iter;
-   
-   
+
+
     for(iter = serverLevel.begin() ; iter != serverLevel.end(); iter++){
-    	// cout<<"iter->first:"<<iter->first<<endl;
-    	// cout<<"iter->second价格:"<<iter->second.second<<endl;
+        // cout<<"iter->first:"<<iter->first<<endl;
+        // cout<<"iter->second价格:"<<iter->second.second<<endl;
         if(serverOutput<=iter->first){
             return iter->second;
         }
@@ -1450,35 +1450,35 @@ pair<int,int> MCMF_YCW::determineDC(int serverOutput){
     return serverLevel.rbegin()->second;
 }
 
-  
+
 
 //确定并加上不同档次服务器和网络节点部署的费用
 int MCMF_YCW::addServerAndDeployPrice(double *cost){
     // cout<<"不加服务器和部署的费用："<<cost<<endl;
-    
+
         int total = 0;
 
         NODE* srcNode = _nodes + _n - 1;
-		ARC* srcArc = srcNode->suspended();
-		
-		while(srcArc != (srcNode+1)->suspended()) {
-			if((_cap[ srcArc == NULL ? -1 : srcArc - _arcs ] - srcArc->rez_capacity()) > 0) {
-				NODE* serverNode = srcArc->head();
-				ARC* a = serverNode->suspended();
+                ARC* srcArc = srcNode->suspended();
 
-				int serverOutput = 0;
-				
-				while(a != (serverNode+1)->suspended()) {
-					
-					if((_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity()) > 0) {
-						serverOutput += (_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity());
-						
-					}
-				
-					++a;
-				}
-				total += serverOutput;
-				
+                while(srcArc != (srcNode+1)->suspended()) {
+                        if((_cap[ srcArc == NULL ? -1 : srcArc - _arcs ] - srcArc->rez_capacity()) > 0) {
+                                NODE* serverNode = srcArc->head();
+                                ARC* a = serverNode->suspended();
+
+                                int serverOutput = 0;
+
+                                while(a != (serverNode+1)->suspended()) {
+
+                                        if((_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity()) > 0) {
+                                                serverOutput += (_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity());
+
+                                        }
+
+                                        ++a;
+                                }
+                                total += serverOutput;
+
                 int serverFee = determineDC(serverOutput).second;
                 // if(serverOutput>250)
                 // cout<<"有服务器超过了250++++++++++++++++++++++++++++++++"<<endl;
@@ -1486,11 +1486,11 @@ int MCMF_YCW::addServerAndDeployPrice(double *cost){
                 *cost += (serverFee + netStateDeployPrice[serverNode-_nodes]);
 //                cout << "^^^" <<serverNode - _nodes << endl;
                 serverAllPrice[serverNode-_nodes] = serverFee + netStateDeployPrice[serverNode-_nodes];
-			}
-			
-			srcArc++;
-		}
-		
+                        }
+
+                        srcArc++;
+                }
+
 }
 map<int, int> MCMF_YCW::getServerAllPrice() {
     return this->serverAllPrice;
@@ -1505,14 +1505,14 @@ int pathNum = 0;
 map<int,int> server_dc_map;
 //确定存储每个服务器的档次
 void MCMF_YCW::storeServerGrade(){
-    
+
     // cout<<"storeServerGrade+++"<<endl;
 
     for(int i=0; i< pathNum ;i++){
-        
+
         int serverIndex = path[i][1];
-        
-        map<int, int>::iterator iter = server_dc_map.find(serverIndex);    
+
+        map<int, int>::iterator iter = server_dc_map.find(serverIndex);
         if(iter!=server_dc_map.end()){
             // cout<<"iter->second加之前："<<iter->second;
             iter->second += pathFlow[i];
@@ -1534,59 +1534,59 @@ void MCMF_YCW::storeServerGrade(){
 }
 
 void MCMF_YCW::print_solution(string& result) {
-	bool  flag = false;
-	for(int k=0;k<10000;k++){
-		path[k].clear();
-	}
-	
-	while(true) {
-		NODE* u = _nodes + _n - 1;
-		long minFlowOfPath = 10000;
-		edgePath.clear();
-		while(!((u-_nodes)>=netStates&&(u-_nodes)<=(_n-2))) {
-			path[pathNum].push_back(u-_nodes);
-			ARC* a = u->suspended();
-			while(a != (u+1)->suspended()) {
-				if((_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity()) > 0) {
-					minFlowOfPath = minFlowOfPath < (_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity()) ? minFlowOfPath:(_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity());
+        bool  flag = false;
+        for(int k=0;k<10000;k++){
+                path[k].clear();
+        }
 
-					edgePath.push_back(a) ;
-					u = a->head();
-					break;
-				}
-				++a;
-			}
-			if(u == _nodes + _n - 1) {
-				flag = true;
-				break;
-			}
-		}
-		if(flag) {
-			break;
-		}
-		path[pathNum].push_back(u-_nodes);
-		pathNum++;
-		pathFlow.push_back(minFlowOfPath);
+        while(true) {
+                NODE* u = _nodes + _n - 1;
+                long minFlowOfPath = 10000;
+                edgePath.clear();
+                while(!((u-_nodes)>=netStates&&(u-_nodes)<=(_n-2))) {
+                        path[pathNum].push_back(u-_nodes);
+                        ARC* a = u->suspended();
+                        while(a != (u+1)->suspended()) {
+                                if((_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity()) > 0) {
+                                        minFlowOfPath = minFlowOfPath < (_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity()) ? minFlowOfPath:(_cap[ a == NULL ? -1 : a - _arcs ] - a->rez_capacity());
 
-		//在路径上删除最小流量
-		for(int k=0; k<edgePath.size(); k++) {
-			edgePath[k]->_rez_capacity += minFlowOfPath;
-		}
-	}
-	//确定当前路径的每个服务器的档次
-	storeServerGrade();
+                                        edgePath.push_back(a) ;
+                                        u = a->head();
+                                        break;
+                                }
+                                ++a;
+                        }
+                        if(u == _nodes + _n - 1) {
+                                flag = true;
+                                break;
+                        }
+                }
+                if(flag) {
+                        break;
+                }
+                path[pathNum].push_back(u-_nodes);
+                pathNum++;
+                pathFlow.push_back(minFlowOfPath);
 
-	//打印路径
-	 
-	 char c[50];
-	 sprintf(c, "%d\n\n", pathNum);
-	 result += c;
-	 for(int i=0;i<pathNum;i++){
-	 	for(int j=1;j<path[i].size();j++){
-	 		sprintf(c,"%d ",path[i][j]>=netStates?(path[i][j]-netStates):path[i][j]);
-	 		result += c;
-		 }
-		 sprintf(c,"%d %d\n",pathFlow[i],server_dc_map[path[i][1]]);
-		 result += c;
-	 }
+                //在路径上删除最小流量
+                for(int k=0; k<edgePath.size(); k++) {
+                        edgePath[k]->_rez_capacity += minFlowOfPath;
+                }
+        }
+        //确定当前路径的每个服务器的档次
+        storeServerGrade();
+
+        //打印路径
+
+         char c[50];
+         sprintf(c, "%d\n\n", pathNum);
+         result += c;
+         for(int i=0;i<pathNum;i++){
+                for(int j=1;j<path[i].size();j++){
+                        sprintf(c,"%d ",path[i][j]>=netStates?(path[i][j]-netStates):path[i][j]);
+                        result += c;
+                 }
+                 sprintf(c,"%d %d\n",pathFlow[i],server_dc_map[path[i][1]]);
+                 result += c;
+         }
 }
