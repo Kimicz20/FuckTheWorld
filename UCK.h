@@ -68,75 +68,64 @@ typedef long long int excessType,priceType;
 class MCMF_YCW
 {
         public:
-        	    class ARC;
+                class ARC;
                 //节点
                 class NODE {
                         public:
-                                excessType _excess; 	// excess of the node;
-                                priceType _price; 	// distance from a sink;
-                                ARC *_first; 		// first outgoing arc;
-                                ARC *_current; 		// current outgoing arc;
-                                ARC *_suspended;
-                                NODE *_q_next; 		// next node in push queue
-                                NODE *_b_next; 		// next node in bucket-list;
-                                NODE *_b_prev; 		// previous node in bucket-list;
-                                long _rank; 		// bucket number;
-                                long _inp; 			// auxilary field;
+                                excessType excessNodeVar;
+                                priceType priceNodeVar;
+                                ARC *firstNodeVar,*currentNodeVar,*suspendedNodeVar;
+                                NODE *qNextNodeVar,*bNextNodeVar,*bPrevNodeVar;
+                                long rankNodeVar, inpNodeVar;
 
                         public:
-                                NODE() {}
-                                ~NODE() {}
-
-                                void set_excess( excessType excess) { _excess = excess; }
-                                void dec_excess( long delta) { _excess -= delta; }
-                                void inc_excess( long delta) { _excess += delta; }
-                                void set_price( priceType price) { _price = price; }
-                                void dec_price( long delta) { _price -= delta; }
-                                void set_first( ARC *first) { _first = first; }
-                                void set_current( ARC *current) { _current = current; }
-                                void inc_current() { _current ++; }
-                                void set_suspended( ARC *suspended) { _suspended = suspended; }
-                                void set_q_next( NODE *q_next) { _q_next = q_next; }
-                                void set_b_next( NODE *b_next) { _b_next = b_next; }
-                                void set_b_prev( NODE *b_prev) { _b_prev = b_prev; }
-                                void set_rank( long rank) { _rank = rank; }
-                                void set_inp( long inp) { _inp = inp; }
-                                excessType excess() { return _excess; }
-                                priceType price() { return _price; }
-                                ARC *first() { return _first; }
-                                void dec_first() { _first --; }
-                                void inc_first() { _first ++; }
-                                ARC *current() { return _current; }
-                                ARC *suspended() { return _suspended; }
-                                NODE *q_next() { return _q_next; }
-                                NODE *b_next() { return _b_next; }
-                                NODE *b_prev() { return _b_prev; }
-                                long rank() { return _rank; }
-                                long inp() { return _inp; }
+                                void set_excess( excessType excess) { excessNodeVar = excess; }
+                                void dec_excess( long delta) { excessNodeVar -= delta; }
+                                void inc_excess( long delta) { excessNodeVar += delta; }
+                                void set_price( priceType price) { priceNodeVar = price; }
+                                void dec_price( long delta) { priceNodeVar -= delta; }
+                                void set_first( ARC *first) { firstNodeVar = first; }
+                                void set_current( ARC *current) { currentNodeVar = current; }
+                                void inc_current() { currentNodeVar ++; }
+                                void set_suspended( ARC *suspended) { suspendedNodeVar = suspended; }
+                                void set_q_next( NODE *q_next) { qNextNodeVar = q_next; }
+                                void set_b_next( NODE *b_next) { bNextNodeVar = b_next; }
+                                void set_b_prev( NODE *b_prev) { bPrevNodeVar = b_prev; }
+                                void set_rank( long rank) { rankNodeVar = rank; }
+                                void set_inp( long inp) { inpNodeVar = inp; }
+                                excessType excess() { return excessNodeVar; }
+                                priceType price() { return priceNodeVar; }
+                                ARC *first() { return firstNodeVar; }
+                                void dec_first() { firstNodeVar --; }
+                                void inc_first() { firstNodeVar ++; }
+                                ARC *current() { return currentNodeVar; }
+                                ARC *suspended() { return suspendedNodeVar; }
+                                NODE *q_next() { return qNextNodeVar; }
+                                NODE *b_next() { return bNextNodeVar; }
+                                NODE *b_prev() { return bPrevNodeVar; }
+                                long rank() { return rankNodeVar; }
+                                long inp() { return inpNodeVar; }
                 };
 
                 //弧定义
                 class ARC {
                         public:
-                                long _rez_capacity; // 剩余容量
-                                priceType _cost; 		// 费用
-                                NODE *_head;
-                                ARC *_sister; 		// 相对弧
+                                long rezCapacityARCVar; // 剩余容量
+                                priceType costARCVar; 		// 费用
+                                NODE *headARCVar;
+                                ARC *sisterARCVar; 		// 相对弧
                         public:
-                                ARC() {}
-                                ~ARC() {}
-
-                                void set_rez_capacity( long rez_capacity) { _rez_capacity = rez_capacity; }
-                                void dec_rez_capacity( long delta) { _rez_capacity -= delta; }
-                                void inc_rez_capacity( long delta) { _rez_capacity += delta; }
-                                void set_cost( priceType cost) { _cost = cost; }
-                                void multiply_cost( priceType mult) { _cost *= mult; }
-                                void set_head( NODE *head) { _head = head; }
-                                void set_sister( ARC *sister) { _sister = sister; }
-                                long rez_capacity() { return _rez_capacity; }
-                                priceType cost() { return _cost; }
-                                NODE *head() { return _head; }
-                                ARC *sister() { return _sister; }
+                                void set_rez_capacity( long rez_capacity) { rezCapacityARCVar = rez_capacity; }
+                                void dec_rez_capacity( long delta) { rezCapacityARCVar -= delta; }
+                                void inc_rez_capacity( long delta) { rezCapacityARCVar += delta; }
+                                void set_cost( priceType cost) { costARCVar = cost; }
+                                void multiply_cost( priceType mult) { costARCVar *= mult; }
+                                void set_head( NODE *head) { headARCVar = head; }
+                                void set_sister( ARC *sister) { sisterARCVar = sister; }
+                                long rez_capacity() { return rezCapacityARCVar; }
+                                priceType cost() { return costARCVar; }
+                                NODE *head() { return headARCVar; }
+                                ARC *sister() { return sisterARCVar; }
                 };
 
 
@@ -144,15 +133,12 @@ class MCMF_YCW
                 //
                 class BUCKET {
                         private:
-                                // 1st node with positive excess or simply 1st node in the buket;
-                                NODE *_p_first;
+                                NODE *pFirstBucketVar;
                         public:
-                        BUCKET( NODE *p_first) : _p_first(p_first) {}
+                                BUCKET( NODE *p_first) : pFirstBucketVar(p_first) {}
                                 BUCKET() {}
-                                ~BUCKET() {}
-
-                                void set_p_first( NODE *p_first) { _p_first = p_first; }
-                                NODE *p_first() { return _p_first; }
+                                void set_p_first( NODE *p_first) { pFirstBucketVar = p_first; }
+                                NODE *p_first() { return pFirstBucketVar; }
                 };
 
                 //计算总费用需要的属性
