@@ -1,5 +1,5 @@
 #include "mcmf.h"
-
+asas
 void MCMF_YCW::err_end( int cc) {
 	// abnormal finish
 	printf ("\nError %d\n", cc );
